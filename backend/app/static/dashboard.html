@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SakuraOps</title>
+<style>
+:root{color-scheme:dark;--bg:#15191F;--panel:#252B34;--accent:#D9A0B7;--term:#98CFA8;--text:#E6E9EE;--muted:#AEB8C5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid #F0BAD1;outline-offset:2px}
+.topbar{height:67px;display:flex;justify-content:space-between;align-items:center;padding:0 28px;border-bottom:1px solid #363D46}
+.brand{color:#F0D1DE;font-weight:650;font-size:18px;display:flex;gap:9px;align-items:center}.flower{color:var(--accent);font-size:23px}
+.account{display:flex;gap:13px;align-items:center;color:var(--muted);font-size:13px}.user{border:1px solid #4C5460;background:#303741;padding:6px 12px;border-radius:20px}
+.logout{border:1px solid #53606E;background:transparent;color:var(--text);border-radius:7px;padding:7px 10px}
+.layout{display:flex;gap:25px;align-items:flex-start;padding:24px 28px}
+.nav{flex:0 0 164px;background:var(--panel);border-radius:23px;padding:8px;display:flex;flex-direction:column;gap:3px}
+.nav button{display:flex;gap:10px;width:100%;align-items:center;text-align:left;border:0;border-radius:14px;padding:11px 12px;background:transparent;color:#D1D6DD;font-size:13px}
+.nav button[aria-current=page]{background:#3D3441;color:#F2C1D5}.nav button:disabled{opacity:.47;cursor:not-allowed}
+.nav .sym{width:18px;text-align:center;font-size:15px}
+.workspace{flex:1;min-width:0;max-width:1100px}.heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:22px}
+h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12px}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.metric,.panel{background:var(--panel);border-radius:11px;padding:20px}
+.metric .label{color:var(--muted);font-size:13px;margin-bottom:13px}.metric .value{font-size:21px;font-weight:600}
+.panel{margin-top:18px}.panel h2{font-size:15px;margin:0 0 11px}.panel p{color:var(--muted);font-size:13px;line-height:1.65;margin:0}
+#window{position:fixed;z-index:20;left:34%;top:155px;width:610px;height:340px;min-width:330px;min-height:210px;max-width:100vw;max-height:calc(100dvh - 15px);display:flex;flex-direction:column;background:#101820;border:1px solid #68717C;border-radius:10px;box-shadow:0 20px 56px #000A;resize:both;overflow:hidden}
+#window[hidden]{display:none}#window.max{left:10px!important;top:77px!important;width:calc(100vw - 20px)!important;height:calc(100dvh - 87px)!important;max-width:none;max-height:none;resize:none}
+.titlebar{height:42px;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding-left:15px;user-select:none;touch-action:none;cursor:grab}
+.titlebar.dragging{cursor:grabbing}.windowname{font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px}.windowname .sym{color:var(--accent)}
+.windowactions{display:flex;height:100%;align-items:center;padding-right:5px;gap:2px}
+.windowactions button{border:0;background:transparent;color:var(--text);height:31px;width:34px;border-radius:5px;font-size:19px}
+.windowactions button:hover{background:#444D58}.windowactions #close:hover{background:#8E3549}
+.termarea{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+#output{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+.entry{margin-bottom:9px}.entry.cmd{color:var(--term)}.entry.error{color:#F5B4B4}
+#xterm{height:100%;width:100%;min-height:0}
+#xterm .xterm{height:100%;padding:4px}
+.editor-pane[hidden]{display:none!important}
+.editor-pane{position:absolute;inset:42px 0 0;background:#101820;display:flex;flex-direction:column;padding:12px;gap:9px;z-index:3}
+.editor-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;flex-wrap:wrap}
+.editor-top button{border:1px solid #576370;border-radius:6px;background:#252B34;color:#E6E9EE;padding:7px 11px}
+.editor-pane textarea{flex:1;min-height:0;min-width:0;resize:none;padding:12px;background:#121A21;border:1px solid #465360;color:#E6E9EE;font:13px/1.6 ui-monospace,Consolas,monospace;tab-size:2}
+.editor-status{font-size:11px;color:#AEB8C5}
+#editor-open{border:1px solid #4D5968;background:#303741;color:#D1D6DD;border-radius:6px;padding:5px 8px;font-size:12px;margin-left:10px}
+#command:disabled{opacity:.5}.resize-note{position:absolute;bottom:3px;right:4px;color:#8995A2;font-size:10px;pointer-events:none}
+@media(max-width:850px){.layout{padding:17px;gap:14px}.nav{flex-basis:125px}.metrics{grid-template-columns:1fr 1fr}#window{left:18%;width:76%}}
+@media(max-width:600px){.topbar{padding:0 15px}.layout{padding:12px;gap:11px}.nav{flex:0 0 49px;border-radius:18px;padding:5px}.nav button{padding:11px 7px;justify-content:center}.nav button .navtext{display:none}.workspace h1{font-size:19px}.heading{display:block}.metrics{grid-template-columns:1fr}.metric{padding:13px}.metric .value{font-size:19px}.panel{padding:15px}#window,#window.max{left:6px!important;top:73px!important;width:calc(100vw - 12px)!important;height:calc(100dvh - 79px)!important;min-width:0;min-height:0;max-width:none;max-height:none;resize:none;border-radius:8px}}
+</style>
+<link rel="stylesheet" href="/static/generated/terminal.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="flower" aria-hidden="true">✿</span>SakuraOps</div>
+  <div class="account"><span class="user" id="username">Użytkownik</span>
+    <form method="post" action="/logout"><input type="hidden" id="logout-csrf" name="csrf" value=""><button class="logout" type="submit">Wyloguj</button></form>
+  </div>
+</header>
+<div class="layout">
+  <nav class="nav" aria-label="Główna nawigacja">
+    <button type="button" aria-current="page"><span class="sym">▦</span><span class="navtext">Pulpit</span></button>
+    <button type="button" disabled title="W przygotowaniu"><span class="sym">▤</span><span class="navtext">Serwery</span></button>
+    <button type="button" id="open-terminal"><span class="sym">⌘</span><span class="navtext">Terminal</span></button>
+    <button type="button" disabled title="W przygotowaniu"><span class="sym">▷</span><span class="navtext">Zadania</span></button>
+    <button type="button" disabled title="W przygotowaniu"><span class="sym">▦</span><span class="navtext">Harmonogramy</span></button>
+    <button type="button" disabled title="W przygotowaniu"><span class="sym">⚙</span><span class="navtext">Ustawienia</span></button>
+  </nav>
+  <main class="workspace">
+    <div class="heading"><h1>Pulpit</h1><span class="sub">SakuraOps 0.1.0-dev</span></div>
+    <div class="metrics">
+      <div class="metric"><div class="label">Konsola</div><div class="value">Gotowa</div></div>
+      <div class="metric"><div class="label">Ansible</div><div class="value">Niepodłączony</div></div>
+      <div class="metric"><div class="label">Tryb pracy</div><div class="value">Lokalny</div></div>
+    </div>
+    <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Wpisz ? lub help. Polecenie edit notatki.md otwiera edytor bezpiecznych plików roboczych. Zarządzanie serwerami i automatyzacje pojawią się później.</p></section>
+  </main>
+</div>
+<section id="window" aria-label="Terminal SakuraOps" role="region" hidden>
+  <div class="titlebar" id="titlebar" tabindex="0" aria-label="Pasek okna terminala. Alt i strzałki przesuwają, Alt Shift i strzałki zmieniają rozmiar.">
+    <div class="windowname"><span class="sym" aria-hidden="true">▣</span> SakuraOps Terminal <button id="editor-open" type="button" title="Jak otworzyć edytor">Edytor</button></div>
+    <div class="windowactions">
+      <button id="minimize" type="button" title="Minimalizuj" aria-label="Minimalizuj">−</button>
+      <button id="maximize" type="button" title="Maksymalizuj" aria-label="Maksymalizuj">□</button>
+      <button id="close" type="button" title="Zamknij" aria-label="Zamknij">×</button>
+    </div>
+  </div>
+  <div class="termarea" id="scrollarea">
+    <div id="xterm" aria-label="Konsola SakuraOps"></div>
+  </div>
+  <div id="editor-pane" class="editor-pane" hidden aria-label="Edytor plików roboczych">
+    <div class="editor-top">
+      <strong id="editor-filename">Plik</strong>
+      <div>
+        <button type="button" id="editor-save">Zapisz (Ctrl+S)</button>
+        <button type="button" id="editor-close">Wróć do terminala</button>
+      </div>
+    </div>
+    <textarea id="editor-content" spellcheck="false" aria-label="Treść pliku UTF-8"></textarea>
+    <div id="editor-status" class="editor-status" role="status"></div>
+  </div>
+  <span class="resize-note" aria-hidden="true">◢</span>
+</section>
+<script src="/static/generated/terminal.js" defer></script>
+</body>
+</html>

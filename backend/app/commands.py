@@ -1,46 +1,105 @@
+"""Restricted SakuraOps command interpreter. Never executes a system shell."""
 import shlex
 
-VERSION = "0.1.0-dev"
+VERSION = "0.2.0-dev"
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end")
+SHOW = ("show version", "show status", "show servers", "show inventory")
+CONFIG = ("help", "show", "end", "exit", "server", "description")
+CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
 COMMANDS = {
-    "help": "Wyświetla dostępne polecenia",
-    "status": "Pokazuje stan SakuraOps",
-    "version": "Pokazuje wersję systemu",
+    "help": "Pomoc w bieżącym trybie",
+    "show": "Wyświetlanie informacji",
+    "configure terminal": "Przejście do trybu konfiguracji",
+    "edit <plik>": "Edytor tekstowy (pliki robocze)",
+    "nano <plik>": "Alias edytora SakuraOps",
+    "files": "Lista plików roboczych",
+    "cat <plik>": "Odczyt pliku roboczego",
+    "clear": "Wyczyść terminal",
+    "exit": "Wyjście z bieżącego trybu",
 }
 
 
-def execute(command: str) -> str:
+def _prompt(mode: str) -> str:
+    return {
+        "exec": "SakuraOps# ",
+        "config": "SakuraOps(config)# ",
+        "config-server": "SakuraOps(config-server)# ",
+    }.get(mode, "SakuraOps# ")
+
+
+def suggestions(mode: str) -> tuple[str, ...]:
+    if mode == "config":
+        return CONFIG
+    if mode == "config-server":
+        return CONFIG_SERVER
+    return ROOT + SHOW
+
+
+def complete(prefix: str, mode: str = "exec") -> list[str]:
+    prefix = prefix.removeprefix("skr ").strip().lower()
+    return sorted(x for x in suggestions(mode) if x.startswith(prefix))
+
+
+def interpret(command: str, mode: str = "exec") -> dict:
+    """Return structured actions; caller authorizes any IO action separately."""
+    mode = mode if mode in ("exec", "config", "config-server") else "exec"
+    prompt = _prompt(mode)
+    raw = command.strip()
+    if raw.startswith("skr "):
+        raw = raw[4:]
     try:
-        args = shlex.split(command)
+        args = shlex.split(raw)
     except ValueError:
-        return "Błąd składni polecenia."
-
+        return {"output": "Błąd składni.", "mode": mode, "prompt": prompt}
+    if len(args) > 12:
+        return {"output": "Zbyt wiele argumentów.", "mode": mode, "prompt": prompt}
     if not args:
-        return ""
+        return {"output": "", "mode": mode, "prompt": prompt}
+    lowered = [part.lower() for part in args]
+    name = lowered[0]
 
-    if args[0] == "skr":
-        args = args[1:]
+    def result(message: str = "", new_mode: str | None = None, **extra):
+        active = new_mode or mode
+        return {"output": message, "mode": active, "prompt": _prompt(active), **extra}
 
-    if not args:
-        return "Wpisz help, aby zobaczyć polecenia."
+    if name in ("help", "?"):
+        return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
+    if name == "show" and len(args) == 1:
+        return result("Dostępne: version, status, servers, inventory")
+    if name == "show" and len(args) == 2:
+        key = lowered[1]
+        if key == "version":
+            return result(f"SakuraOps {VERSION}")
+        if key == "status":
+            return result(f"SakuraOps: uruchomiony\nWersja: {VERSION}\nAnsible: niepodłączony\nKonsola: gotowa")
+        if key in ("servers", "inventory"):
+            return result("Brak podłączonego inventory. To nie jest odczyt serwerów produkcyjnych.")
+    if name in ("status", "version") and len(args) == 1 and mode == "exec":
+        return interpret("show " + name, mode)
+    if lowered == ["configure", "terminal"] and mode == "exec":
+        return result("Tryb konfiguracji (bez zapisu zmian infrastruktury).", "config")
+    if name == "server" and mode == "config" and len(args) == 2:
+        return result(f"Wybrano serwer: {args[1]} (tryb demonstracyjny).", "config-server")
+    if name == "description" and mode.startswith("config"):
+        return result("Zmiana opisu nie jest jeszcze zaimplementowana.")
+    if name == "exit" and len(args) == 1:
+        return result("", {"exec": "exec", "config": "exec", "config-server": "config"}[mode])
+    if name == "end" and len(args) == 1:
+        return result("", "exec")
+    if name == "clear" and len(args) == 1:
+        return result("", action="clear")
+    if name == "history" and len(args) == 1:
+        return result("Historia jest przechowywana w bieżącym oknie terminala.", action="history")
+    if name == "files" and len(args) == 1 and mode == "exec":
+        return result("", action="files")
+    if name in ("edit", "nano", "cat") and len(args) == 2 and mode == "exec":
+        return result("", action="read" if name == "cat" else "edit", filename=args[1])
+    if raw.endswith("?"):
+        return result("\n".join(complete(raw[:-1], mode)) or "Brak pasujących komend.")
+    return result("Nieznane polecenie. Wpisz ? lub help.")
 
-    name, *params = args
 
-    if name == "help" and not params:
-        return "\n".join(
-            f"{cmd:<12} {description}"
-            for cmd, description in COMMANDS.items()
-        )
-
-    if name == "version" and not params:
-        return f"SakuraOps {VERSION}"
-
-    if name == "status" and not params:
-        return (
-            "SakuraOps: uruchomiony\n"
-            f"Wersja: {VERSION}\n"
-            "Konsola: dostępna\n"
-            "Ansible: jeszcze niepodłączony"
-        )
-
-    return f"Nieznane polecenie: {name}. Wpisz help."
+def execute(command: str) -> str:
+    """Backward-compatible helper for existing tests."""
+    return interpret(command)["output"]

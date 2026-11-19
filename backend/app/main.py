@@ -8,6 +8,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -18,6 +19,7 @@ secret_file = Path(__file__).resolve().parents[2] / ".secrets/session_key"
 secret = secret_file.read_text().strip()
 
 app = FastAPI(title="SakuraOps", docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 app.add_middleware(
     SessionMiddleware,
@@ -71,20 +73,15 @@ def home(request: Request):
     if not current_user(request):
         return RedirectResponse("/login", status_code=303)
 
-    user = current_user(request)
     csrf = request.session.setdefault("csrf", secrets.token_urlsafe(32))
-
-    return page(
-        "<h1>🌸 SakuraOps</h1>"
-        "<p>Zalogowano jako: <b>" + html.escape(user["username"]) + "</b></p>"
-        "<p>Rola: " + html.escape(user["role"]) + "</p>"
-        "<h2>Konsola administracyjna</h2>"
-        "<pre>skr status\nskr server list\nskr help</pre>"
-        "<small>Podgląd przyszłych poleceń. Konsola nie jest jeszcze aktywna.</small>"
-        "<form method='post' action='/logout'>"
-        "<input type='hidden' name='csrf' value='" + csrf + "'>"
-        "<button>Wyloguj</button></form>"
+    template_path = Path(__file__).resolve().parent / "static" / "dashboard.html"
+    template = template_path.read_text(encoding="utf-8")
+    token = html.escape(csrf, quote=True)
+    template = template.replace(
+        "</head>",
+        f'<meta name="sakuraops-csrf" content="{token}"></head>',
     )
+    return HTMLResponse(template, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/login")
@@ -162,9 +159,9 @@ def me(request: Request):
     return user
 
 # SakuraOps Console v0.1
-import json
 from pydantic import BaseModel, Field
-from .commands import execute
+from .commands import interpret, complete
+from .workspace import list_files, read_text, write_text
 
 
 class ConsoleCommand(BaseModel):
@@ -175,19 +172,7 @@ class ConsoleCommand(BaseModel):
 def console_page(request: Request):
     if not current_user(request):
         return RedirectResponse("/login", status_code=303)
-
-    csrf = request.session.setdefault("csrf", secrets.token_urlsafe(32))
-    template = (
-        Path(__file__).resolve().parent / "static" / "console.html"
-    ).read_text(encoding="utf-8")
-
-    script = (
-        "<script>window.SAKURAOPS_CSRF = "
-        + json.dumps(csrf)
-        + ";</script>"
-    )
-    template = template.replace("</head>", script + "</head>")
-    return HTMLResponse(template)
+    return RedirectResponse("/?terminal=1", status_code=303)
 
 
 @app.post("/api/console")
@@ -202,4 +187,53 @@ def console_execute(request: Request, body: ConsoleCommand):
     if not expected or not hmac.compare_digest(expected, supplied):
         raise HTTPException(403, "Nieprawidłowy token formularza")
 
-    return {"output": execute(body.command)}
+    mode = request.session.get("console_mode", "exec")
+    result = interpret(body.command, mode)
+    request.session["console_mode"] = result["mode"]
+    return result
+
+class CompletionRequest(BaseModel):
+    prefix: str = Field(max_length=500)
+
+
+@app.post("/api/console/complete")
+def console_complete(request: Request, body: CompletionRequest):
+    require_console_session(request)
+    mode = request.session.get("console_mode", "exec")
+    return {"matches": complete(body.prefix, mode)}
+
+
+def require_console_session(request: Request, *, edit: bool = False):
+    user = current_user(request)
+    if user is None:
+        raise HTTPException(401, "Wymagane logowanie")
+    expected = request.session.get("csrf", "")
+    supplied = request.headers.get("X-CSRF-Token", "")
+    if not expected or not hmac.compare_digest(expected, supplied):
+        raise HTTPException(403, "Nieprawidłowy CSRF")
+    if edit and user["role"] != "admin":
+        raise HTTPException(403, "Edycja plikow wymaga roli administratora")
+    return user
+
+
+class WorkspaceWrite(BaseModel):
+    content: str = Field(max_length=65536)
+
+
+@app.get("/api/workspace")
+def workspace_files(request: Request):
+    require_console_session(request)
+    return {"files": list_files()}
+
+
+@app.get("/api/workspace/{filename}")
+def workspace_read(request: Request, filename: str):
+    require_console_session(request)
+    return {"filename": filename, "content": read_text(filename)}
+
+
+@app.put("/api/workspace/{filename}")
+def workspace_write(request: Request, filename: str, body: WorkspaceWrite):
+    require_console_session(request, edit=True)
+    write_text(filename, body.content)
+    return {"saved": True, "filename": filename}

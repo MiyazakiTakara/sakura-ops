@@ -1,0 +1,35 @@
+name: SakuraOps checks
+
+on:
+  push:
+    branches: [main, feat/floating-terminal-ui]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Python test dependencies
+        run: python -m pip install fastapi sqlalchemy argon2-cffi itsdangerous httpx pytest python-multipart
+      - name: Check Python syntax and tests
+        run: |
+          python -m compileall -q backend/app backend/create_admin.py
+          python -m pytest -q tests/test_ui_shell.py
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Confirm built assets
+        run: |
+          test -s backend/app/static/generated/terminal.js
+          test -s backend/app/static/generated/terminal.css
