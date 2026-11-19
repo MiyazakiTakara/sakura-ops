@@ -157,9 +157,9 @@ def me(request: Request):
     return user
 
 # SakuraOps Console v0.1
-import json
 from pydantic import BaseModel, Field
-from .commands import execute
+from .commands import interpret, complete
+from .workspace import list_files, read_text, write_text
 
 
 class ConsoleCommand(BaseModel):
@@ -185,4 +185,53 @@ def console_execute(request: Request, body: ConsoleCommand):
     if not expected or not hmac.compare_digest(expected, supplied):
         raise HTTPException(403, "Nieprawidłowy token formularza")
 
-    return {"output": execute(body.command)}
+    mode = request.session.get("console_mode", "exec")
+    result = interpret(body.command, mode)
+    request.session["console_mode"] = result["mode"]
+    return result
+
+class CompletionRequest(BaseModel):
+    prefix: str = Field(max_length=500)
+
+
+@app.post("/api/console/complete")
+def console_complete(request: Request, body: CompletionRequest):
+    require_console_session(request)
+    mode = request.session.get("console_mode", "exec")
+    return {"matches": complete(body.prefix, mode)}
+
+
+def require_console_session(request: Request, *, edit: bool = False):
+    user = current_user(request)
+    if user is None:
+        raise HTTPException(401, "Wymagane logowanie")
+    expected = request.session.get("csrf", "")
+    supplied = request.headers.get("X-CSRF-Token", "")
+    if not expected or not hmac.compare_digest(expected, supplied):
+        raise HTTPException(403, "Nieprawidłowy CSRF")
+    if edit and user["role"] != "admin":
+        raise HTTPException(403, "Edycja plikow wymaga roli administratora")
+    return user
+
+
+class WorkspaceWrite(BaseModel):
+    content: str = Field(max_length=65536)
+
+
+@app.get("/api/workspace")
+def workspace_files(request: Request):
+    require_console_session(request)
+    return {"files": list_files()}
+
+
+@app.get("/api/workspace/{filename}")
+def workspace_read(request: Request, filename: str):
+    require_console_session(request)
+    return {"filename": filename, "content": read_text(filename)}
+
+
+@app.put("/api/workspace/{filename}")
+def workspace_write(request: Request, filename: str, body: WorkspaceWrite):
+    require_console_session(request, edit=True)
+    write_text(filename, body.content)
+    return {"saved": True, "filename": filename}
