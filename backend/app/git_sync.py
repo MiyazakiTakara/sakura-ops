@@ -170,6 +170,7 @@ def list_cached_files(name: str, kind: str) -> list[str]:
     output = _git(["-C", str(target), "ls-files", "--", *paths])
     return sorted(
         line for line in output.splitlines()
-        if line.endswith((".ini", ".yaml", ".yml")) and
+        if any(line.startswith(folder + "/") for folder in paths) and
+        line.endswith((".ini", ".yaml", ".yml")) and
         len(line) <= 500 and ".." not in line.split("/")
     )[:200]
