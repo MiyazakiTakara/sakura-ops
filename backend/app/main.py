@@ -167,6 +167,7 @@ from .inventory import discover
 from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
 from .git_sync import synchronize, list_cached_files, read_repository_file, write_repository_file, diff_repository_file
 from .git_changes import git_status, commit_selected, push_explicit
+from .inventory_preview import preview_inventory
 
 
 class ConsoleCommand(BaseModel):
@@ -202,10 +203,20 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
-    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff", "repository-status", "repository-commit", "repository-push"):
+    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff", "repository-status", "repository-commit", "repository-push", "inventory-preview"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
-        if action == "repositories-list":
+        if action == "inventory-preview":
+            preview = preview_inventory(result["name"], result["filename"])
+            if result["kind"] == "hosts":
+                result["output"] = "\n".join(preview["hosts"]) or "Brak hostów."
+            else:
+                result["output"] = "\n".join(
+                    row["name"] + " (" + str(row["host_count"]) + "): "
+                    + (", ".join(row["hosts"]) or "brak hostów")
+                    for row in preview["groups"]
+                ) or "Brak grup."
+        elif action == "repositories-list":
             repositories = list_repositories()
             result["output"] = ("\\n".join(
                 f"{row['name']}  {row['branch']}  {row['url']}  (bez synchronizacji)"
@@ -377,6 +388,12 @@ def repository_commit(request: Request, name: str, body: GitCommitRequest):
 def repository_push(request: Request, name: str, body: GitPushRequest):
     require_console_session(request, edit=True)
     return push_explicit(name, body.expected_head)
+
+
+@app.get("/api/repositories/{name}/inventory-preview")
+def repository_inventory_preview(request: Request, name: str, path: str):
+    require_console_session(request, edit=True)
+    return preview_inventory(name, path)
 
 
 @app.delete("/api/repositories/{name}")
