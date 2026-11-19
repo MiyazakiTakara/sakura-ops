@@ -3,6 +3,8 @@
 Only metadata is stored. No clone/fetch, credentials or repository execution.
 """
 import re
+import hashlib
+import json
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
@@ -76,3 +78,9 @@ def delete_repository(name: str) -> None:
             raise HTTPException(404, "Nie znaleziono repozytorium")
         db.delete(repo)
         db.commit()
+
+
+def repository_fingerprint() -> str:
+    """Stable change token shared by all FastAPI worker processes."""
+    payload = json.dumps(list_repositories(), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
