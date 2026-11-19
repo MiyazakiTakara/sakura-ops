@@ -135,6 +135,8 @@ async function runCommand() {
         writeOutput(file.content || "Plik nie istnieje albo jest pusty.");
       } else if (data.action === "edit") {
         await openEditor(data.filename);
+      } else if (data.action === "repository-edit") {
+        await openFilePage(data.name, data.filename);
       } else {
         writeOutput(data.output);
         if (/^(?:skr\\s+)?repository\\s+(?:add|delete|sync)\\b/i.test(command) && !repositoryView.hidden)
@@ -336,23 +338,51 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", updateRepositoriesWhenVisible);
 
+const navInventory = document.getElementById("nav-inventory");
+const navPlaybooks = document.getElementById("nav-playbooks");
+const filesView = document.getElementById("files-view");
+let filesKind = "inventory";
+
 function setView(view) {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany w pliku Git?")) return false;
   const showRepo = view === "repositories";
-  dashboardView.hidden = showRepo;
+  const showFiles = view === "inventory" || view === "playbooks";
+  dashboardView.hidden = showRepo || showFiles;
   repositoryView.hidden = !showRepo;
+  filesView.hidden = !showFiles;
+  const menu = [
+    [navDashboard, view === "dashboard"],
+    [navRepositories, showRepo],
+    [navInventory, view === "inventory"],
+    [navPlaybooks, view === "playbooks"],
+  ];
+  for (const [item, selected] of menu) {
+    if (selected) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  }
   if (showRepo) {
-    navRepositories.setAttribute("aria-current", "page");
-    navDashboard.removeAttribute("aria-current");
     void refreshRepositories();
     if (document.visibilityState === "visible") connectRepositoryEvents();
   } else {
     disconnectRepositoryEvents();
-    navDashboard.setAttribute("aria-current", "page");
-    navRepositories.removeAttribute("aria-current");
   }
+  if (showFiles) {
+    filesKind = view;
+    document.getElementById("files-heading").textContent = view === "inventory" ? "Inventory" : "Playbooki";
+    gitFileEditor?.destroy();
+    gitFileEditor = null;
+    gitFilePath = null;
+    document.getElementById("git-file-editor").replaceChildren();
+    document.getElementById("git-file-save").disabled = true;
+    void refreshFileRepositories();
+  }
+  return true;
 }
 navDashboard.addEventListener("click", () => setView("dashboard"));
 navRepositories.addEventListener("click", () => setView("repositories"));
+navInventory.addEventListener("click", () => setView("inventory"));
+navPlaybooks.addEventListener("click", () => setView("playbooks"));
 
 function repoText(tag, text, className = "") {
   const element = document.createElement(tag);
@@ -482,6 +512,156 @@ repoForm.addEventListener("submit", async event => {
     submit.disabled = false;
   }
 });
+const fileRepoSelect = document.getElementById("files-repository");
+const gitFilesList = document.getElementById("git-files-list");
+const gitFileMount = document.getElementById("git-file-editor");
+const gitFileSave = document.getElementById("git-file-save");
+const gitFileStatus = document.getElementById("git-file-status");
+let gitFileEditor = null;
+let gitFilePath = null;
+let gitSavedValue = "";
+let gitFileRevision = "";
+
+function resetGitFileEditor() {
+  gitFileEditor?.destroy();
+  gitFileEditor = null;
+  gitFilePath = null;
+  gitSavedValue = "";
+  gitFileRevision = "";
+  gitFileMount.replaceChildren();
+  gitFileSave.disabled = true;
+  document.getElementById("git-file-title").textContent = "Wybierz plik";
+  document.getElementById("git-file-dirty").textContent = "";
+}
+
+async function refreshFileRepositories(selectedName = null) {
+  try {
+    const payload = await request("/api/repositories");
+    const current = selectedName || fileRepoSelect.value;
+    fileRepoSelect.replaceChildren();
+    for (const repo of payload.repositories) {
+      const option = document.createElement("option");
+      option.value = repo.name;
+      option.textContent = repo.name + " · " + repo.branch;
+      fileRepoSelect.append(option);
+    }
+    if (payload.repositories.some(repo => repo.name === current)) fileRepoSelect.value = current;
+    resetGitFileEditor();
+    await refreshGitFiles();
+  } catch (error) {
+    gitFileStatus.textContent = error.message || "Nie udało się odczytać repozytoriów.";
+  }
+}
+
+async function refreshGitFiles() {
+  const name = fileRepoSelect.value;
+  resetGitFileEditor();
+  gitFilesList.replaceChildren();
+  if (!name) {
+    gitFilesList.append(repoText("p", "Brak skonfigurowanych repozytoriów.", "repo-note"));
+    return;
+  }
+  try {
+    const payload = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/files?kind=" + filesKind);
+    if (!payload.files.length) {
+      gitFilesList.append(repoText("p", "Brak plików tej kategorii.", "repo-note"));
+      return;
+    }
+    for (const file of payload.files) {
+      const button = repoText("button", file);
+      button.type = "button";
+      button.addEventListener("click", () => { void loadGitFile(name, file); });
+      gitFilesList.append(button);
+    }
+    gitFileStatus.textContent = "Wybierz plik. Edycja wyłącznie lokalna, bez commit/push.";
+  } catch (error) {
+    gitFilesList.append(repoText("p", error.message || "Odczyt plików nie powiódł się.", "repo-note"));
+  }
+}
+
+async function loadGitFile(name, path) {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany w pliku Git?")) return;
+  try {
+    const data = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/content?path=" + encodeURIComponent(path));
+    resetGitFileEditor();
+    gitFilePath = path;
+    gitSavedValue = data.content;
+    gitFileRevision = data.revision;
+    document.getElementById("git-file-title").textContent = path;
+    for (const button of gitFilesList.querySelectorAll("button")) {
+      if (button.textContent === path) button.setAttribute("aria-current", "true");
+      else button.removeAttribute("aria-current");
+    }
+    gitFileEditor = new EditorView({
+      state: EditorState.create({
+        doc: data.content,
+        extensions: [
+          basicSetup, editorMode(path), syntaxHighlighting(defaultHighlightStyle),
+          editorTheme,
+          EditorView.updateListener.of(update => {
+            if (update.docChanged) {
+              const dirty = update.state.doc.toString() !== gitSavedValue;
+              gitFileSave.disabled = !dirty;
+              document.getElementById("git-file-dirty").textContent = dirty ? "Niezapisane zmiany" : "";
+            }
+          }),
+          keymap.of([{ key: "Mod-s", run: () => { void saveGitFile(); return true; } }]),
+        ],
+      }),
+      parent: gitFileMount,
+    });
+    gitFileStatus.textContent = "Plik lokalny · Ctrl+S zapis · bez commit/push";
+  } catch (error) {
+    gitFileStatus.textContent = error.message || "Nie udało się otworzyć pliku.";
+  }
+}
+
+async function saveGitFile() {
+  if (!gitFileEditor || !gitFilePath) return;
+  const content = gitFileEditor.state.doc.toString();
+  gitFileSave.disabled = true;
+  try {
+    const name = fileRepoSelect.value;
+    const saved = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/content?path=" + encodeURIComponent(gitFilePath), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, revision: gitFileRevision }),
+    });
+    gitSavedValue = saved.content;
+    gitFileRevision = saved.revision;
+    document.getElementById("git-file-dirty").textContent = "";
+    gitFileStatus.textContent = "Zapisano lokalnie. Zmiany nie zostały wysłane do Git.";
+  } catch (error) {
+    gitFileSave.disabled = false;
+    gitFileStatus.textContent = error.message || "Zapis nie powiódł się.";
+  }
+}
+
+async function openFilePage(name, path) {
+  const kind = path.startsWith("inventory/") || path.startsWith("inventories/") ? "inventory" :
+    path.startsWith("playbooks/") || path.startsWith("playbook/") ? "playbooks" : null;
+  if (!kind) {
+    writeOutput("Obsługiwane są wyłącznie pliki inventory i playbooków.");
+    return;
+  }
+  if (setView(kind)) {
+    await refreshFileRepositories(name);
+    await loadGitFile(name, path);
+  }
+}
+
+fileRepoSelect.addEventListener("change", () => {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany?")) return;
+  void refreshGitFiles();
+});
+document.getElementById("files-refresh").addEventListener("click", () => { void refreshGitFiles(); });
+gitFileSave.addEventListener("click", () => { void saveGitFile(); });
+
 fetch("/api/me", {credentials:"same-origin"}).then(r => r.ok ? r.json() : null)
   .then(data => { if(data?.username) document.getElementById("username").textContent = data.username; }).catch(()=>{});
 if (new URLSearchParams(location.search).get("terminal") === "1") {
