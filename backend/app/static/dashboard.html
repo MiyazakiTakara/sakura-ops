@@ -90,7 +90,7 @@ const output=document.getElementById("output");
 const scrollarea=document.getElementById("scrollarea");
 const csrf=document.querySelector('meta[name="sakuraops-csrf"]')?.content || "";
 document.getElementById("logout-csrf").value=csrf;
-const history=[];
+const commandHistory=[];
 let historyIndex=0;
 let maximized=false;
 let busy=false;
@@ -142,7 +142,7 @@ window.addEventListener("resize",bound);
 document.getElementById("command-form").addEventListener("submit",async event=>{
  event.preventDefault();
  const command=input.value.trim();if(!command||busy)return;
- history.push(command);historyIndex=history.length;input.value="";
+ commandHistory.push(command);historyIndex=commandHistory.length;input.value="";
  if(command==="clear"||command==="skr clear"){output.replaceChildren();return;}
  print("skr > "+command,"cmd");
  busy=true;input.disabled=true;
@@ -155,8 +155,8 @@ document.getElementById("command-form").addEventListener("submit",async event=>{
  finally{busy=false;input.disabled=false;input.focus();}
 });
 input.addEventListener("keydown",event=>{
- if(event.key==="ArrowUp"&&historyIndex>0){event.preventDefault();input.value=history[--historyIndex];}
- else if(event.key==="ArrowDown"){event.preventDefault();if(historyIndex<history.length)historyIndex++;input.value=history[historyIndex]||"";}
+ if(event.key==="ArrowUp"&&historyIndex>0){event.preventDefault();input.value=commandHistory[--historyIndex];}
+ else if(event.key==="ArrowDown"){event.preventDefault();if(historyIndex<commandHistory.length)historyIndex++;input.value=commandHistory[historyIndex]||"";}
  else if(event.ctrlKey&&event.key.toLowerCase()==="l"){event.preventDefault();output.replaceChildren();}
 });
 document.addEventListener("keydown",event=>{
