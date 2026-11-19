@@ -1,3 +1,4 @@
+import { commonPrefix } from "./completion.js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { basicSetup } from "codemirror";
@@ -134,7 +135,11 @@ async function runCommand() {
         writeOutput(file.content || "Plik nie istnieje albo jest pusty.");
       } else if (data.action === "edit") {
         await openEditor(data.filename);
-      } else writeOutput(data.output);
+      } else {
+        writeOutput(data.output);
+        if (/^(?:skr\\s+)?repository\\s+(?:add|delete)\\b/i.test(command) && !repositoryView.hidden)
+          void refreshRepositories();
+      }
     }
   } catch (error) {
     writeOutput(error.message || "Błąd połączenia");
@@ -143,17 +148,29 @@ async function runCommand() {
     if (!editorOpen) drawPrompt();
   }
 }
+let lastCompletionList = null;
 async function autocomplete() {
   try {
     const data = await request("/api/console/complete", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prefix: line }) });
     const choices = data.matches;
-    if (choices.length === 1) replaceLine(choices[0] + " ");
-    else if (choices.length > 1) {
-      terminal.write("\r\n"); writeOutput(choices.join("    ")); drawPrompt();
+    if (!choices.length) return;
+    const shared = commonPrefix(choices);
+    if (shared.length > line.length) {
+      replaceLine(shared + (choices.length === 1 && !shared.endsWith(" ") ? " " : ""));
+      lastCompletionList = null;
+    } else if (lastCompletionList !== line) {
+      terminal.write("\r\n");
+      writeOutput(choices.join("    "));
+      drawPrompt();
+      lastCompletionList = line;
     }
-  } catch (error) { terminal.write("\r\n"); writeOutput(error.message); drawPrompt(); }
+  } catch (error) {
+    terminal.write("\r\n");
+    writeOutput(error.message);
+    drawPrompt();
+  }
 }
 terminal.onData(async data => {
   if (busy || editorOpen || win.hidden) return;
@@ -165,6 +182,7 @@ terminal.onData(async data => {
   if (data === "\u000c") { terminal.clear(); drawPrompt(); return; }
   if (data === "\u0003") { terminal.write("^C\r\n"); line = ""; drawPrompt(); return; }
   if (data === "\t") { busy = true; await autocomplete(); busy = false; return; }
+  lastCompletionList = null;
   if (data === "\x1b[A") { if (historyIndex > 0) replaceLine(history[--historyIndex]); return; }
   if (data === "\x1b[B") { if (historyIndex < history.length) historyIndex++; replaceLine(history[historyIndex] || ""); return; }
   if (data === "?") {
@@ -266,6 +284,128 @@ document.getElementById("editor-open").addEventListener("click", () => {
   terminal.write("\r\n");
   writeOutput("Edytor: edit notatki.md lub nano inventory.ini");
   drawPrompt();
+});
+// Repository configuration is shared with the restricted CLI via the backend API.
+const dashboardView = document.getElementById("dashboard-view");
+const repositoryView = document.getElementById("repository-view");
+const navDashboard = document.getElementById("nav-dashboard");
+const navRepositories = document.getElementById("nav-repositories");
+const repoForm = document.getElementById("repo-form");
+const repoList = document.getElementById("repo-list");
+const repoStatus = document.getElementById("repo-status");
+let repoLoading = false;
+let repoRefreshQueued = false;
+let repoSnapshot = null;
+const REPOSITORY_REFRESH_MS = 5000;
+
+function updateRepositoriesWhenVisible() {
+  if (!repositoryView.hidden && document.visibilityState === "visible") {
+    void refreshRepositories();
+  }
+}
+window.setInterval(updateRepositoriesWhenVisible, REPOSITORY_REFRESH_MS);
+document.addEventListener("visibilitychange", updateRepositoriesWhenVisible);
+window.addEventListener("focus", updateRepositoriesWhenVisible);
+
+function setView(view) {
+  const showRepo = view === "repositories";
+  dashboardView.hidden = showRepo;
+  repositoryView.hidden = !showRepo;
+  if (showRepo) {
+    navRepositories.setAttribute("aria-current", "page");
+    navDashboard.removeAttribute("aria-current");
+    void refreshRepositories();
+  } else {
+    navDashboard.setAttribute("aria-current", "page");
+    navRepositories.removeAttribute("aria-current");
+  }
+}
+navDashboard.addEventListener("click", () => setView("dashboard"));
+navRepositories.addEventListener("click", () => setView("repositories"));
+
+function repoText(tag, text, className = "") {
+  const element = document.createElement(tag);
+  element.textContent = text;
+  if (className) element.className = className;
+  return element;
+}
+async function refreshRepositories() {
+  if (repoLoading) {
+    repoRefreshQueued = true;
+    return;
+  }
+  repoLoading = true;
+  try {
+    const payload = await request("/api/repositories");
+    const snapshot = JSON.stringify(payload.repositories);
+    if (snapshot === repoSnapshot) return;
+    repoSnapshot = snapshot;
+    repoList.replaceChildren();
+    if (!payload.repositories.length) {
+      repoList.append(repoText("p", "Nie dodano jeszcze repozytoriów.", "repo-note"));
+      return;
+    }
+    for (const repo of payload.repositories) {
+      const item = document.createElement("div");
+      item.className = "repo-row";
+      const info = repoText("div", "", "repo-details");
+      const title = repoText("strong", repo.name + " · " + repo.branch);
+      const url = repoText("span", repo.url, "repo-url");
+      const caption = repoText("span", "Konfiguracja zapisana · synchronizacja wyłączona", "repo-note");
+      info.append(title, url, caption);
+      const del = repoText("button", "Usuń", "repo-delete");
+      del.type = "button";
+      del.setAttribute("aria-label", "Usuń konfigurację " + repo.name);
+      del.addEventListener("click", async () => {
+        if (!confirm("Usunąć konfigurację repozytorium " + repo.name + "?")) return;
+        del.disabled = true;
+        try {
+          await request("/api/repositories/" + encodeURIComponent(repo.name), { method: "DELETE" });
+          repoStatus.textContent = "Usunięto konfigurację " + repo.name + ".";
+          await refreshRepositories();
+        } catch (error) {
+          repoStatus.textContent = error.message || "Nie udało się usunąć.";
+          del.disabled = false;
+        }
+      });
+      item.append(info, del);
+      repoList.append(item);
+    }
+  } catch (error) {
+    repoSnapshot = null;
+    repoList.replaceChildren(repoText("p", error.message || "Nie udało się odczytać repozytoriów.", "repo-note"));
+  } finally {
+    repoLoading = false;
+    if (repoRefreshQueued) {
+      repoRefreshQueued = false;
+      void refreshRepositories();
+    }
+  }
+}
+repoForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const submit = document.getElementById("repo-submit");
+  submit.disabled = true;
+  repoStatus.textContent = "Zapisywanie konfiguracji...";
+  try {
+    const body = {
+      name: document.getElementById("repo-name").value.trim(),
+      url: document.getElementById("repo-url").value.trim(),
+      branch: document.getElementById("repo-branch").value.trim(),
+    };
+    const saved = await request("/api/repositories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    repoStatus.textContent = "Dodano " + saved.name + ". Synchronizacja Git nie jest jeszcze dostępna.";
+    repoForm.reset();
+    await refreshRepositories();
+  } catch (error) {
+    repoStatus.textContent = error.message || "Nie udało się dodać repozytorium.";
+  } finally {
+    submit.disabled = false;
+  }
 });
 fetch("/api/me", {credentials:"same-origin"}).then(r => r.ok ? r.json() : null)
   .then(data => { if(data?.username) document.getElementById("username").textContent = data.username; }).catch(()=>{});
