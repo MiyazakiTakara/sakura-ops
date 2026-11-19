@@ -178,7 +178,7 @@ async function autocomplete() {
     const choices = data.matches;
     if (!choices.length) {
       if (data.hint && lastCompletionList !== line) {
-        terminal.write("\\r\\n");
+        terminal.write("\r\n");
         writeOutput(data.hint);
         drawPrompt();
         lastCompletionList = line;
