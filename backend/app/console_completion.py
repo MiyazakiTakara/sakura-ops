@@ -3,8 +3,6 @@
 Every suggestion is a valid prefix assembled from registered commands and
 current authorized configuration. No system shell, network calls, or secrets.
 """
-import re
-
 from fastapi import HTTPException
 
 from .commands import complete as static_complete
@@ -103,6 +101,28 @@ def _candidate_suffix(
     return [v for v in values if v.lower().startswith(partial.lower())]
 
 
+MANUAL_HINTS = {
+    "{newname}": "Podaj nazwę nowego repozytorium, np. ansible",
+    "{url}": "Wpisz adres HTTPS albo SSH repozytorium.",
+    "{branch}": "Podaj nazwę gałęzi, np. main (opcjonalnie).",
+    "{message}": 'Wpisz opis commita w cudzysłowie, np. "Aktualizacja inventory".',
+    "{description}": "Wpisz opis.",
+    "{server}": "Wpisz nazwę serwera.",
+}
+
+
+def _manual_hint(patterns: tuple[tuple[str, ...], ...], fixed: list[str]) -> str | None:
+    for pattern in patterns:
+        if len(pattern) <= len(fixed):
+            continue
+        if all(segment.startswith("{") or value.lower() == segment
+               for segment, value in zip(pattern, fixed)):
+            hint = MANUAL_HINTS.get(pattern[len(fixed)])
+            if hint:
+                return hint
+    return None
+
+
 def context_complete(prefix: str, mode: str = "exec") -> tuple[list[str], str | None]:
     from .repositories import list_repositories
 
@@ -125,9 +145,9 @@ def context_complete(prefix: str, mode: str = "exec") -> tuple[list[str], str | 
         matched.extend(_candidate_suffix(pattern, fixed, partial, repos))
 
     if not matched:
-        fallback = static_complete(raw, mode)
-        # Free-form fields intentionally require manual input.
-        return fallback, None
+        fallback = [item for item in static_complete(raw, mode)
+                    if item.lower().startswith(raw.lower())]
+        return fallback, None if fallback else _manual_hint(grammar, fixed)
 
     # Each suggestion is a full line; the frontend can calculate the common
     # prefix and show alternatives without inserting literal placeholders.
