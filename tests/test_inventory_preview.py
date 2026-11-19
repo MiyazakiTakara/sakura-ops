@@ -115,3 +115,42 @@ def test_cli_and_page_expose_same_backend():
     assert 'id="servers-groups"' in page
     assert 'inventory-preview?path=' in client
     assert '@app.get("/api/repositories/{name}/inventory-preview")' in server
+
+
+def test_task_plan_targets_only_selected_static_group(monkeypatch):
+    from backend.app import task_plans
+    content = "[prod]\napp-1\napp-2\n[staging]\ntest-1\n"
+    monkeypatch.setattr(inventory_preview, "list_cached_files",
+                        lambda repo, kind: ["inventory/hosts.ini"])
+    monkeypatch.setattr(inventory_preview, "read_repository_file",
+                        lambda repo, path: {"content": content})
+    monkeypatch.setattr(task_plans, "list_cached_files",
+                        lambda repo, kind: ["playbooks/audit.yml"])
+    monkeypatch.setattr(task_plans, "read_repository_file",
+                        lambda repo, path: {"content": "- hosts: all"})
+    plan = task_plans.task_plan("ansible", "inventory/hosts.ini", "playbooks/audit.yml", "prod")
+    assert plan["hosts"] == ["app-1", "app-2"]
+    assert plan["state"] == "preview_only"
+    assert plan["executable"] is False
+    with pytest.raises(HTTPException):
+        task_plans.task_plan("ansible", "inventory/hosts.ini", "playbooks/other.yml", "prod")
+    with pytest.raises(HTTPException):
+        task_plans.task_plan("ansible", "inventory/hosts.ini", "playbooks/audit.yml", "unknown")
+    with pytest.raises(HTTPException):
+        task_plans.task_plan("ansible", "inventory/hosts.ini", "playbooks/audit.yml", "prod;echo")
+
+
+def test_task_plan_cli_and_gui_wiring():
+    parsed = interpret("task plan ansible inventory/hosts.ini playbooks/audit.yml prod")
+    assert parsed["action"] == "task-plan"
+    assert parsed["group"] == "prod"
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "backend/app/static/dashboard.html").read_text()
+    js = (root / "frontend/src/terminal.js").read_text()
+    backend = (root / "backend/app/main.py").read_text()
+    for item in ("nav-tasks", "task-repository", "task-playbook", "task-group", "task-plan-hosts"):
+        assert 'id="' + item + '"' in page
+    assert 'request("/api/tasks/plan"' in js
+    assert '@app.post("/api/tasks/plan")' in backend
+    assert 'require_console_session(request, edit=True)' in backend
