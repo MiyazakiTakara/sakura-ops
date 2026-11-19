@@ -26,15 +26,27 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 REF = "refs/sakuraops/synced"
 
 
-def _settings(url: str) -> tuple[str, list[str]]:
+def _allowed_host(url: str) -> tuple[str, str]:
     parsed = urlsplit(url)
-    if parsed.scheme != "ssh" or parsed.username != "git" or not parsed.hostname:
-        raise HTTPException(422, "Synchronizacja wymaga adresu ssh://git@host/owner/repo.git")
-    if parsed.password or parsed.query or parsed.fragment or parsed.port not in (None, 22, 2222):
-        raise HTTPException(422, "Nieprawidłowy SSH URL")
-    hosts = {x.strip().lower() for x in os.getenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "").split(",") if x.strip()}
-    if parsed.hostname.lower() not in hosts:
+    if (parsed.scheme not in ("ssh", "https") or not parsed.hostname or
+        parsed.password or parsed.query or parsed.fragment or
+        (parsed.username and (parsed.scheme == "https" or parsed.username != "git"))):
+        raise HTTPException(422, "Dozwolony jest HTTPS lub ssh://git@host/repo")
+    if parsed.scheme == "https" and parsed.port not in (None, 443):
+        raise HTTPException(422, "HTTPS musi używać portu 443")
+    if parsed.scheme == "ssh" and parsed.port not in (None, 22, 2222):
+        raise HTTPException(422, "Nieprawidłowy port SSH")
+    allowed = {h.strip().lower() for h in
+               os.getenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "").split(",") if h.strip()}
+    if parsed.hostname.lower() not in allowed:
         raise HTTPException(403, "Host Git nie jest dopuszczony do synchronizacji")
+    return parsed.scheme, parsed.hostname.lower()
+
+
+def _settings(url: str) -> tuple[str, list[str]]:
+    scheme, host = _allowed_host(url)
+    if scheme != "ssh":
+        raise HTTPException(422, "To nie jest adres SSH")
     key = Path(os.getenv("SAKURAOPS_GIT_SSH_KEY", ""))
     known = Path(os.getenv("SAKURAOPS_GIT_KNOWN_HOSTS", ""))
     if not key.is_file() or key.is_symlink() or not known.is_file() or known.is_symlink():
@@ -49,7 +61,26 @@ def _settings(url: str) -> tuple[str, list[str]]:
         "-o", "ProxyJump=none", "-o", "ForwardAgent=no",
         "-o", "ConnectTimeout=8",
     ]
-    return parsed.hostname, ssh
+    return host, ssh
+
+
+def _https_credentials(name: str) -> dict[str, str]:
+    """Optional token stored in a private file, never entered in the console."""
+    env_name = "SAKURAOPS_GIT_TOKEN_FILE_" + name.upper().replace("-", "_")
+    value = os.getenv(env_name)
+    if not value:
+        return {}
+    path = Path(value)
+    if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
+        raise HTTPException(409, "Plik tokenu HTTPS musi istnieć i mieć uprawnienia 0600")
+    token = path.read_text(encoding="utf-8").strip()
+    if not token or len(token) > 4096 or "\n" in token:
+        raise HTTPException(409, "Nieprawidłowy token HTTPS")
+    return {
+        "GIT_ASKPASS": str((Path(__file__).parent / "git_askpass.py").resolve()),
+        "SAKURAOPS_ASKPASS_USER": os.getenv("SAKURAOPS_GIT_HTTPS_USER", "oauth2"),
+        "SAKURAOPS_ASKPASS_TOKEN": token,
+    }
 
 
 def _git(args: list[str], ssh: list[str] | None = None) -> str:
