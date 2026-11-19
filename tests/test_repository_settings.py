@@ -205,7 +205,7 @@ def test_git_file_read_write_and_revision_conflict(repository_database, monkeypa
     (root / ".git").mkdir(parents=True)
     (root / "inventory").mkdir()
     target = root / "inventory" / "hosts.ini"
-    target.write_text("[all]\\nnode1\\n".replace("\\n", "\n"), encoding="utf-8")
+    target.write_text("[all]\\nnode1\\n", encoding="utf-8")
     monkeypatch.setattr(git_sync, "list_cached_files",
                         lambda name, kind: ["inventory/hosts.ini"] if kind == "inventory" else [])
 
