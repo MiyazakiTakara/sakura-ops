@@ -18,6 +18,7 @@ let history = [];
 let historyIndex = 0;
 let line = "";
 let cursor = 0;
+let renderedCursor = 0;
 let prompt = "SakuraOps# ";
 let busy = false;
 let drag = null;
@@ -102,6 +103,7 @@ function drawPrompt() {
   terminal.write("\x1b[32m" + prompt + "\x1b[0m" + line);
   const remaining = Array.from(line).length - cursor;
   if (remaining) terminal.write("\x1b[" + remaining + "D");
+  renderedCursor = cursor;
 }
 function replaceLine(value) {
   terminal.write("\r\x1b[2K");
@@ -112,7 +114,7 @@ function replaceLine(value) {
 function redrawInput() {
   // Return to the prompt start, including when the input wraps to another row.
   const columns = Math.max(1, terminal.cols);
-  const visualCursor = Array.from(prompt).length + cursor;
+  const visualCursor = Array.from(prompt).length + renderedCursor;
   const up = Math.floor(visualCursor / columns);
   if (up) terminal.write("\x1b[" + up + "A");
   terminal.write("\r\x1b[J");
