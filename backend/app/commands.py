@@ -2,7 +2,7 @@
 import shlex
 
 VERSION = "0.2.0-dev"
-ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit")
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push")
 SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
@@ -25,6 +25,9 @@ COMMANDS = {
     "show repository <name> file <path>": "Pokaż zawartość pliku (do 64 KiB)",
     "show repository <name> diff <path>": "Pokaż lokalne różnice Git",
     "repository edit <name> <path>": "Edytuj lokalny plik inventory/playbook",
+    "repository status <name>": "Zmiany plików oraz aktualny commit",
+    "repository commit <name> <SHA> <message> <file...>": "Zatwierdź wybrane pliki (bez push)",
+    "repository push <name> <SHA>": "Wyślij commit bez force (jawne potwierdzenie SHA)",
 }
 
 
@@ -73,6 +76,13 @@ def interpret(command: str, mode: str = "exec") -> dict:
 
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
+    if name == "repository" and mode == "exec" and len(args) == 3 and lowered[1] == "status":
+        return result("", action="repository-status", name=args[2])
+    if name == "repository" and mode == "exec" and len(args) >= 6 and lowered[1] == "commit":
+        return result("", action="repository-commit", name=args[2],
+                      expected_head=args[3], commit_message=args[4], files=args[5:])
+    if name == "repository" and mode == "exec" and len(args) == 4 and lowered[1] == "push":
+        return result("", action="repository-push", name=args[2], expected_head=args[3])
     if name == "repository" and mode == "exec" and len(args) == 4 and lowered[1] == "edit":
         return result("", action="repository-edit", name=args[2], filename=args[3])
     if name == "show" and len(args) == 5 and lowered[1] == "repository" and lowered[3] == "diff":
