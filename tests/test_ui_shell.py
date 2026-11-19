@@ -59,6 +59,10 @@ def test_dashboard_contains_window_controls():
         'id="close"',
         'id="xterm"',
         'id="editor-pane"',
-        "sakuraops-csrf",
     ):
         assert fragment in dashboard
+
+    main = (
+        Path(__file__).resolve().parents[1] / "backend/app/main.py"
+    ).read_text(encoding="utf-8")
+    assert 'name="sakuraops-csrf"' in main
