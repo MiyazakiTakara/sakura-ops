@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import html
 import os
@@ -7,7 +8,7 @@ from pathlib import Path
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
@@ -163,7 +164,7 @@ from pydantic import BaseModel, Field
 from .commands import interpret, complete
 from .workspace import list_files, read_text, write_text
 from .inventory import discover
-from .repositories import list_repositories, add_repository, delete_repository
+from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
 
 
 class ConsoleCommand(BaseModel):
@@ -290,3 +291,38 @@ def repositories_delete(request: Request, name: str):
     require_console_session(request, edit=True)
     delete_repository(name)
     return {"deleted": name}
+
+
+@app.get("/api/repositories/events")
+async def repository_events(request: Request):
+    user = current_user(request)
+    if user is None:
+        raise HTTPException(401, "Wymagane logowanie")
+    if user["role"] != "admin":
+        raise HTTPException(403, "Wymagana rola administratora")
+
+    async def stream():
+        previous = await asyncio.to_thread(repository_fingerprint)
+        # Initial handshake does not force a redundant list refresh.
+        yield "event: repositories-changed\ndata: {}\nretry: 2000\n\n"
+        elapsed = 0
+        while not await request.is_disconnected():
+            await asyncio.sleep(1)
+            elapsed += 1
+            # Check the current session; stop streaming if account is disabled.
+            if elapsed % 15 == 0:
+                account = await asyncio.to_thread(current_user, request)
+                if account is None or account["role"] != "admin":
+                    break
+            current = await asyncio.to_thread(repository_fingerprint)
+            if current != previous:
+                previous = current
+                yield "event: repositories-changed\ndata: {}\n\n"
+            elif elapsed % 15 == 0:
+                yield ": heartbeat\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )

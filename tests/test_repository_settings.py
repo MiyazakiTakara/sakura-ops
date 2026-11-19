@@ -88,13 +88,26 @@ def test_gui_fields_and_shared_endpoint_are_present():
     assert "require_console_session(request, edit=True)" in api
 
 
-def test_repository_panel_refreshes_without_full_page_reload():
+def test_repository_panel_uses_sse_with_fallback():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     js = (root / "frontend/src/terminal.js").read_text(encoding="utf-8")
-    assert "REPOSITORY_REFRESH_MS = 5000" in js
-    assert 'document.addEventListener("visibilitychange", updateRepositoriesWhenVisible)' in js
-    assert 'window.addEventListener("focus", updateRepositoriesWhenVisible)' in js
-    assert "repoSnapshot = snapshot" in js
+    api = (root / "backend/app/main.py").read_text(encoding="utf-8")
+    assert 'new EventSource("/api/repositories/events")' in js
+    assert 'addEventListener("repositories-changed", updateRepositoriesWhenVisible)' in js
+    assert "FALLBACK_REFRESH_MS = 30000" in js
     assert "repoRefreshQueued = true" in js
     assert "window.location.reload" not in js
+    assert '@app.get("/api/repositories/events")' in api
+    assert 'media_type="text/event-stream"' in api
+    assert "user[\"role\"] != \"admin\"" in api
+
+
+def test_sse_fingerprint_changes_with_repository_configuration(repository_database):
+    from backend.app.repositories import repository_fingerprint
+    before = repository_fingerprint()
+    repositories.add_repository("ansible", "https://git.example.org/a/repo.git")
+    after = repository_fingerprint()
+    assert before != after
+    repositories.delete_repository("ansible")
+    assert repository_fingerprint() == before
