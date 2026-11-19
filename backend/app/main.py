@@ -71,20 +71,15 @@ def home(request: Request):
     if not current_user(request):
         return RedirectResponse("/login", status_code=303)
 
-    user = current_user(request)
     csrf = request.session.setdefault("csrf", secrets.token_urlsafe(32))
-
-    return page(
-        "<h1>🌸 SakuraOps</h1>"
-        "<p>Zalogowano jako: <b>" + html.escape(user["username"]) + "</b></p>"
-        "<p>Rola: " + html.escape(user["role"]) + "</p>"
-        "<h2>Konsola administracyjna</h2>"
-        "<pre>skr status\nskr server list\nskr help</pre>"
-        "<small>Podgląd przyszłych poleceń. Konsola nie jest jeszcze aktywna.</small>"
-        "<form method='post' action='/logout'>"
-        "<input type='hidden' name='csrf' value='" + csrf + "'>"
-        "<button>Wyloguj</button></form>"
+    template_path = Path(__file__).resolve().parent / "static" / "dashboard.html"
+    template = template_path.read_text(encoding="utf-8")
+    token = html.escape(csrf, quote=True)
+    template = template.replace(
+        "</head>",
+        f'<meta name="sakuraops-csrf" content="{token}"></head>',
     )
+    return HTMLResponse(template, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/login")
@@ -175,19 +170,7 @@ class ConsoleCommand(BaseModel):
 def console_page(request: Request):
     if not current_user(request):
         return RedirectResponse("/login", status_code=303)
-
-    csrf = request.session.setdefault("csrf", secrets.token_urlsafe(32))
-    template = (
-        Path(__file__).resolve().parent / "static" / "console.html"
-    ).read_text(encoding="utf-8")
-
-    script = (
-        "<script>window.SAKURAOPS_CSRF = "
-        + json.dumps(csrf)
-        + ";</script>"
-    )
-    template = template.replace("</head>", script + "</head>")
-    return HTMLResponse(template)
+    return RedirectResponse("/?terminal=1", status_code=303)
 
 
 @app.post("/api/console")
