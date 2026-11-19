@@ -147,17 +147,37 @@ async function runCommand() {
     if (!editorOpen) drawPrompt();
   }
 }
+let lastCompletionList = null;
+function commonPrefix(strings) {
+  if (!strings.length) return "";
+  let prefix = strings[0];
+  for (const item of strings.slice(1)) {
+    while (!item.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  }
+  return prefix;
+}
 async function autocomplete() {
   try {
     const data = await request("/api/console/complete", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prefix: line }) });
     const choices = data.matches;
-    if (choices.length === 1) replaceLine(choices[0] + " ");
-    else if (choices.length > 1) {
-      terminal.write("\r\n"); writeOutput(choices.join("    ")); drawPrompt();
+    if (!choices.length) return;
+    const shared = commonPrefix(choices);
+    if (shared.length > line.length) {
+      replaceLine(shared + (choices.length === 1 && !shared.endsWith(" ") ? " " : ""));
+      lastCompletionList = null;
+    } else if (lastCompletionList !== line) {
+      terminal.write("\r\n");
+      writeOutput(choices.join("    "));
+      drawPrompt();
+      lastCompletionList = line;
     }
-  } catch (error) { terminal.write("\r\n"); writeOutput(error.message); drawPrompt(); }
+  } catch (error) {
+    terminal.write("\r\n");
+    writeOutput(error.message);
+    drawPrompt();
+  }
 }
 terminal.onData(async data => {
   if (busy || editorOpen || win.hidden) return;
@@ -169,6 +189,7 @@ terminal.onData(async data => {
   if (data === "\u000c") { terminal.clear(); drawPrompt(); return; }
   if (data === "\u0003") { terminal.write("^C\r\n"); line = ""; drawPrompt(); return; }
   if (data === "\t") { busy = true; await autocomplete(); busy = false; return; }
+  lastCompletionList = null;
   if (data === "\x1b[A") { if (historyIndex > 0) replaceLine(history[--historyIndex]); return; }
   if (data === "\x1b[B") { if (historyIndex < history.length) historyIndex++; replaceLine(history[historyIndex] || ""); return; }
   if (data === "?") {
