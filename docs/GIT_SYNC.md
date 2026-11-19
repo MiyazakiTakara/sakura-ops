@@ -81,9 +81,13 @@ git switch feat/manual-git-sync
 source .venv/bin/activate
 cd frontend && npm install && npm run build && cd ..
 python -m pytest -q
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir backend/app
 ```
 
 Sprawdź, że `repository sync ansible` działa jako użytkownik WSL mający
 dostęp do Forgejo. Na prywatnym repo bez skonfigurowanych poświadczeń należy
 oczekiwać czytelnej odmowy synchronizacji zamiast promptu w aplikacji.
+
+## Uvicorn i katalog Git
+
+W trybie deweloperskim Uvicorn z `--reload` musi obserwować wyłącznie `backend/app`, nie cały katalog projektu. Inaczej `git clone` albo `git fetch` w `data/git_worktrees/` uruchamia niepotrzebny restart serwera, przerywając sesję przeglądarki i SSE. W produkcji uruchamiaj serwer bez `--reload`.
