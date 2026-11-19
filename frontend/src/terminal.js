@@ -385,7 +385,7 @@ async function refreshRepositories() {
       const caption = repoText("span",
         repo.sync_status === "synced"
           ? "Ostatnio pobrano: " + repo.synced_at + " · " + repo.commit_sha.slice(0, 12)
-          : "Nie synchronizowano · wymagany SSH deploy key",
+          : "Nie synchronizowano · HTTPS lub SSH",
         "repo-note");
       info.append(title, url, caption);
       const del = repoText("button", "Usuń", "repo-delete");
@@ -464,7 +464,7 @@ repoForm.addEventListener("submit", async event => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    repoStatus.textContent = "Dodano " + saved.name + ". Synchronizacja Git nie jest jeszcze dostępna.";
+    repoStatus.textContent = "Dodano " + saved.name + ". Możesz rozpocząć synchronizację HTTPS lub SSH.";
     repoForm.reset();
     await refreshRepositories();
   } catch (error) {
