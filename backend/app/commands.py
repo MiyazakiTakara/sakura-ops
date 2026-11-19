@@ -3,7 +3,7 @@ import shlex
 
 VERSION = "0.2.0-dev"
 ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end")
-SHOW = ("show version", "show status", "show servers", "show inventory")
+SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands")
 CONFIG = ("help", "show", "end", "exit", "server", "description")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
@@ -66,15 +66,19 @@ def interpret(command: str, mode: str = "exec") -> dict:
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
     if name == "show" and len(args) == 1:
-        return result("Dostępne: version, status, servers, inventory")
+        return result("Dostępne: version, status, servers, inventory, playbooks, commands")
     if name == "show" and len(args) == 2:
         key = lowered[1]
         if key == "version":
             return result(f"SakuraOps {VERSION}")
         if key == "status":
             return result(f"SakuraOps: uruchomiony\nWersja: {VERSION}\nAnsible: niepodłączony\nKonsola: gotowa")
-        if key in ("servers", "inventory"):
-            return result("Brak podłączonego inventory. To nie jest odczyt serwerów produkcyjnych.")
+        if key == "commands":
+            return result("\n".join(COMMANDS))
+        if key == "servers":
+            return result("Lista serwerów będzie dostępna po parsowaniu inventory.")
+        if key in ("inventory", "playbooks"):
+            return result("", action="repo-list", kind=key)
     if name in ("status", "version") and len(args) == 1 and mode == "exec":
         return interpret("show " + name, mode)
     if lowered == ["configure", "terminal"] and mode == "exec":
