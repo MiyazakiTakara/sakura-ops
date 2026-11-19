@@ -2,7 +2,7 @@
 import shlex
 
 VERSION = "0.2.0-dev"
-ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end")
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync")
 SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
