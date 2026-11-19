@@ -86,3 +86,15 @@ def test_gui_fields_and_shared_endpoint_are_present():
     assert '"/api/repositories"' in js
     assert '@app.post("/api/repositories"' in api
     assert "require_console_session(request, edit=True)" in api
+
+
+def test_repository_panel_refreshes_without_full_page_reload():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "frontend/src/terminal.js").read_text(encoding="utf-8")
+    assert "REPOSITORY_REFRESH_MS = 5000" in js
+    assert 'document.addEventListener("visibilitychange", updateRepositoriesWhenVisible)' in js
+    assert 'window.addEventListener("focus", updateRepositoriesWhenVisible)' in js
+    assert "repoSnapshot = snapshot" in js
+    assert "repoRefreshQueued = true" in js
+    assert "window.location.reload" not in js
