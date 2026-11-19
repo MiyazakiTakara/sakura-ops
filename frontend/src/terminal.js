@@ -1,3 +1,4 @@
+import { commonPrefix } from "./completion.js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { basicSetup } from "codemirror";
@@ -148,14 +149,6 @@ async function runCommand() {
   }
 }
 let lastCompletionList = null;
-function commonPrefix(strings) {
-  if (!strings.length) return "";
-  let prefix = strings[0];
-  for (const item of strings.slice(1)) {
-    while (!item.startsWith(prefix)) prefix = prefix.slice(0, -1);
-  }
-  return prefix;
-}
 async function autocomplete() {
   try {
     const data = await request("/api/console/complete", {
