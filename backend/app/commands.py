@@ -80,7 +80,7 @@ def interpret(command: str, mode: str = "exec") -> dict:
         return result("", action="repository-status", name=args[2])
     if name == "repository" and mode == "exec" and len(args) >= 6 and lowered[1] == "commit":
         return result("", action="repository-commit", name=args[2],
-                      expected_head=args[3], message=args[4], files=args[5:])
+                      expected_head=args[3], commit_message=args[4], files=args[5:])
     if name == "repository" and mode == "exec" and len(args) == 4 and lowered[1] == "push":
         return result("", action="repository-push", name=args[2], expected_head=args[3])
     if name == "repository" and mode == "exec" and len(args) == 4 and lowered[1] == "edit":
