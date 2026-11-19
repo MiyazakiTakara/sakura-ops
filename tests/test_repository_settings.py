@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app import repositories
 from backend.app.commands import complete, interpret
-from backend.app.models import GitRepository
+from backend.app.models import GitRepository, GitSyncState
 
 
 @pytest.fixture()
@@ -15,6 +15,7 @@ def repository_database(monkeypatch):
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     GitRepository.__table__.create(bind=engine)
+    GitSyncState.__table__.create(bind=engine)
     monkeypatch.setattr(repositories, "SessionLocal", sessionmaker(bind=engine))
     yield
     engine.dispose()
@@ -111,3 +112,52 @@ def test_sse_fingerprint_changes_with_repository_configuration(repository_databa
     assert before != after
     repositories.delete_repository("ansible")
     assert repository_fingerprint() == before
+
+
+def test_manual_sync_uses_pinned_ssh_and_no_checkout(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    root = tmp_path / "mirrors"
+    root.mkdir()
+    monkeypatch.setattr(git_sync, "MIRRORS", root)
+    calls = []
+
+    def fake_settings(url):
+        assert url.startswith("ssh://git@")
+        return "git.example.org", ["ssh", "-F", "/dev/null"]
+
+    def fake_git(args, ssh=None):
+        calls.append((args, ssh))
+        if "rev-parse" in args:
+            return "a" * 40
+        if "ls-tree" in args:
+            return "inventory/prod.yml\\nplaybooks/audit.yaml\\nREADME.md"
+        return ""
+
+    monkeypatch.setattr(git_sync, "_settings", fake_settings)
+    monkeypatch.setattr(git_sync, "_git", fake_git)
+    repositories.add_repository("ansible", "ssh://git@git.example.org/team/ansible.git")
+    result = git_sync.synchronize("ansible")
+    assert result["commit_sha"] == "a" * 40
+    assert git_sync.list_cached_files("ansible", "inventory") == ["inventory/prod.yml"]
+    assert git_sync.list_cached_files("ansible", "playbooks") == ["playbooks/audit.yaml"]
+    assert not any("checkout" in parts for parts, _ in calls)
+    assert not any("push" in parts for parts, _ in calls)
+    assert any("fetch" in parts and ssh is not None for parts, ssh in calls)
+    rows = repositories.list_repositories()
+    assert rows[0]["sync_status"] == "synced"
+
+
+def test_ssh_sync_is_disabled_without_operator_approval(monkeypatch):
+    from backend.app.git_sync import _settings
+    monkeypatch.delenv("SAKURAOPS_GIT_ALLOWED_HOSTS", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        _settings("ssh://git@git.example.org/team/ansible.git")
+    assert exc.value.status_code == 403
+
+
+def test_sync_console_actions():
+    assert interpret("repository sync ansible")["action"] == "repository-sync"
+    result = interpret("show repository ansible inventory")
+    assert result["action"] == "repository-files"
+    assert result["kind"] == "inventory"
