@@ -932,7 +932,10 @@ taskPreviewButton.addEventListener("click", async () => {
   } catch (error) {
     if (id === taskRequestId) taskStatus.textContent = error.message || "Błąd planu.";
   } finally {
-    if (id === taskRequestId) clearTaskPreview();
+    if (id === taskRequestId) {
+      taskPreviewButton.disabled = !taskRepo.value || !taskInventory.value
+        || !taskPlaybook.value || !taskGroup.value;
+    }
   }
 });
 
