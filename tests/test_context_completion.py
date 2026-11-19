@@ -92,7 +92,7 @@ def test_freeform_values_are_not_fabricated(completion_data):
 
 def test_partial_and_static_commands(completion_data):
     matches, _ = console_completion.context_complete("repo")
-    assert "repository sync" in matches
+    assert matches == ["repository"]
     matches, _ = console_completion.context_complete("show h")
     assert "show hosts" in matches
     matches, _ = console_completion.context_complete("show repositories")
