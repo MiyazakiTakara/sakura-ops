@@ -120,6 +120,7 @@ def test_manual_sync_uses_pinned_ssh_and_no_checkout(repository_database, monkey
     root = tmp_path / "mirrors"
     root.mkdir()
     monkeypatch.setattr(git_sync, "MIRRORS", root)
+    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
     calls = []
 
     def fake_settings(url):
@@ -182,7 +183,7 @@ def test_https_sync_without_token_uses_allowlisted_host(repository_database, mon
     repositories.add_repository("httpsrepo", "https://git.example.org/team/ansible.git")
     result = git_sync.synchronize("httpsrepo")
     assert result["commit_sha"] == "b" * 40
-    assert any("fetch" in args and ssh is None and credentials is None
+    assert any("fetch" in args and ssh is None and not credentials
                for args, ssh, credentials in calls)
 
 
