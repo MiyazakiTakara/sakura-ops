@@ -90,29 +90,17 @@ def _options(token: str, chosen: list[str], repositories: list[str]) -> list[str
 
 def _candidate_suffix(
     grammar: tuple[str, ...], fixed: list[str], partial: str, repos: list[str]
-) -> str | None:
+) -> list[str]:
     if len(fixed) >= len(grammar):
-        return None
+        return []
     chosen: list[str] = []
     for index, value in enumerate(fixed):
         pattern = grammar[index]
-        if pattern.startswith("{"):
-            # A free-form argument is accepted but not interpreted as an option.
-            chosen.append(value)
-        elif value.lower() != pattern:
-            return None
-        else:
-            chosen.append(value)
-    position = len(fixed)
-    option = grammar[position]
-    values = _options(option, chosen, repos)
-    match = [v for v in values if v.lower().startswith(partial.lower())]
-    if not match:
-        return None
-    # Only a complete token may progress into the next grammar position.
-    if len(match) != 1:
-        return None
-    return match[0]
+        if not pattern.startswith("{") and value.lower() != pattern:
+            return []
+        chosen.append(value)
+    values = _options(grammar[len(fixed)], chosen, repos)
+    return [v for v in values if v.lower().startswith(partial.lower())]
 
 
 def context_complete(prefix: str, mode: str = "exec") -> tuple[list[str], str | None]:
@@ -134,9 +122,7 @@ def context_complete(prefix: str, mode: str = "exec") -> tuple[list[str], str | 
     repos = [entry["name"] for entry in list_repositories()]
     matched: list[str] = []
     for pattern in grammar:
-        token = _candidate_suffix(pattern, fixed, partial, repos)
-        if token is not None:
-            matched.append(token)
+        matched.extend(_candidate_suffix(pattern, fixed, partial, repos))
 
     if not matched:
         fallback = static_complete(raw, mode)
