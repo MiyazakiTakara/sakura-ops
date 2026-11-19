@@ -67,6 +67,19 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 #command:disabled{opacity:.5}.resize-note{position:absolute;bottom:3px;right:4px;color:#8995A2;font-size:10px;pointer-events:none}
 @media(max-width:850px){.layout{padding:17px;gap:14px}.nav{flex-basis:125px}.metrics{grid-template-columns:1fr 1fr}#window{left:18%;width:76%}}
 @media(max-width:600px){.topbar{padding:0 15px}.layout{padding:12px;gap:11px}.nav{flex:0 0 49px;border-radius:18px;padding:5px}.nav button{padding:11px 7px;justify-content:center}.nav button .navtext{display:none}.workspace h1{font-size:19px}.heading{display:block}.metrics{grid-template-columns:1fr}.metric{padding:13px}.metric .value{font-size:19px}.panel{padding:15px}#window,#window.max{left:6px!important;top:73px!important;width:calc(100vw - 12px)!important;height:calc(100dvh - 79px)!important;min-width:0;min-height:0;max-width:none;max-height:none;resize:none;border-radius:8px}}
+.files-toolbar{display:flex;gap:11px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:13px}
+.files-toolbar select{min-width:190px;border:1px solid #516071;border-radius:7px;background:#151C24;color:#E6E9EE;padding:9px 11px}
+.files-layout{display:grid;grid-template-columns:minmax(170px,230px) minmax(0,1fr);gap:15px}
+.git-files-list{border:1px solid #444F5B;border-radius:8px;min-height:340px;max-height:60vh;overflow:auto;padding:7px}
+.git-files-list button{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:6px;background:transparent;color:#DCE4ED;font:12px ui-monospace,monospace;overflow-wrap:anywhere}
+.git-files-list button:hover{background:#35404C}
+.git-files-list button[aria-current=true]{background:#473845;color:#FFE0ED}
+.git-file-area{min-width:0}
+#git-file-editor{height:410px;border:1px solid #465360;border-radius:7px;overflow:hidden;background:#121A21}
+#git-file-editor .cm-editor{height:100%}
+#git-file-editor .cm-focused{outline:2px solid #D9A0B7;outline-offset:-2px}
+#git-file-status{margin-top:10px;min-height:22px;overflow-wrap:anywhere}
+@media(max-width:680px){.files-layout{grid-template-columns:1fr}.git-files-list{min-height:90px;max-height:190px}#git-file-editor{height:310px}}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -81,9 +94,11 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
   <nav class="nav" aria-label="Główna nawigacja">
     <button id="nav-dashboard" type="button" aria-current="page"><span class="sym">▦</span><span class="navtext">Pulpit</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">▤</span><span class="navtext">Serwery</span></button>
+    <button type="button" id="nav-inventory"><span class="sym">▣</span><span class="navtext">Inventory</span></button>
+    <button type="button" id="nav-playbooks"><span class="sym">▷</span><span class="navtext">Playbooki</span></button>
     <button type="button" id="open-terminal"><span class="sym">⌘</span><span class="navtext">Terminal</span></button>
     <button type="button" id="nav-repositories"><span class="sym">⑂</span><span class="navtext">Repozytoria</span></button>
-    <button type="button" disabled title="W przygotowaniu"><span class="sym">▷</span><span class="navtext">Zadania</span></button>
+    <button type="button" disabled title="W przygotowaniu"><span class="sym">◷</span><span class="navtext">Zadania</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">▦</span><span class="navtext">Harmonogramy</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">⚙</span><span class="navtext">Ustawienia</span></button>
   </nav>
@@ -97,6 +112,28 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     </div>
     <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Wpisz ? lub help. Polecenie edit notatki.md otwiera edytor bezpiecznych plików roboczych. Zarządzanie serwerami i automatyzacje pojawią się później.</p></section>
    </div>
+   <section id="files-view" hidden aria-label="Pliki Git">
+    <div class="heading"><h1 id="files-heading">Inventory</h1><span class="sub">Lokalne pliki Git · bez uruchamiania Ansible</span></div>
+    <div class="panel">
+      <div class="files-toolbar">
+        <label for="files-repository">Repozytorium</label>
+        <select id="files-repository" aria-label="Wybierz repozytorium"></select>
+        <button type="button" class="repo-sync" id="files-refresh">Odśwież listę</button>
+      </div>
+      <div class="files-layout">
+        <div id="git-files-list" class="git-files-list" aria-label="Pliki"><span class="repo-note">Wybierz repozytorium.</span></div>
+        <div class="git-file-area">
+          <div class="files-toolbar">
+            <strong id="git-file-title">Wybierz plik</strong>
+            <span id="git-file-dirty" class="repo-note"></span>
+            <button type="button" class="repo-sync" id="git-file-save" disabled>Zapisz lokalnie</button>
+          </div>
+          <div id="git-file-editor" aria-label="Edytor pliku Git"></div>
+          <div id="git-file-status" class="repo-note" role="status" aria-live="polite">Zmiany zostają lokalnie. Nie wykonujemy commit ani push.</div>
+        </div>
+      </div>
+    </div>
+   </section>
    <section id="repository-view" hidden aria-label="Repozytoria Git">
     <div class="heading"><h1>Repozytoria</h1><span class="sub">Konfiguracja Git</span></div>
     <div class="panel">
