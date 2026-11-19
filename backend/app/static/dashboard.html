@@ -26,6 +26,10 @@ button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus
 .repo-add,.repo-delete{border:1px solid #9A7788;border-radius:7px;padding:10px 12px;background:#D9A0B7;color:#172029;font-size:13px;font-weight:600}
 .repo-delete{background:transparent;color:#F0C4D3;border-color:#725965}
 .repo-list{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.repo-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.repo-sync{border:1px solid #536070;border-radius:7px;padding:10px 12px;background:#293440;color:#E8EDF1;font-size:13px;cursor:pointer}
+.repo-sync:disabled,.repo-delete:disabled{opacity:.55;cursor:wait}
+.repo-sync:hover{background:#3A4858}
 .repo-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;border:1px solid #444F5B;border-radius:8px}
 .repo-details{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
 .repo-url{color:var(--muted);overflow-wrap:anywhere}
@@ -97,7 +101,7 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     <div class="heading"><h1>Repozytoria</h1><span class="sub">Konfiguracja Git</span></div>
     <div class="panel">
       <h2>Dodaj repozytorium</h2>
-      <p>Konfiguracja bez automatycznej synchronizacji, klonowania i dostępu do serwerów. Nie wklejaj tokenów ani haseł do adresu.</p>
+      <p>Ręczna synchronizacja HTTPS lub SSH tylko do odczytu. Dla prywatnego repozytorium użyj skonfigurowanego tokenu HTTPS albo klucza SSH. Nigdy nie wpisuj poświadczeń w adres Git.</p>
       <form class="repo-form" id="repo-form">
         <div class="repo-field"><label for="repo-name">Nazwa</label><input id="repo-name" name="name" placeholder="ansible" pattern="[a-z][a-z0-9_-]{1,39}" maxlength="40" required></div>
         <div class="repo-field"><label for="repo-url">Adres Git (HTTPS/SSH)</label><input id="repo-url" name="url" type="text" placeholder="https://git.example.org/team/ansible.git" maxlength="500" required></div>

@@ -21,3 +21,12 @@ class GitRepository(Base):
     name: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     branch: Mapped[str] = mapped_column(String(100), nullable=False, default="main")
+
+
+class GitSyncState(Base):
+    __tablename__ = "git_sync_states"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    repository_name: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    synced_at: Mapped[str] = mapped_column(String(40), nullable=False)

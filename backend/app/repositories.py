@@ -12,7 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from .database import SessionLocal, engine
-from .models import GitRepository
+from .models import GitRepository, GitSyncState
+
+GitSyncState.__table__.create(bind=engine, checkfirst=True)
 
 GitRepository.__table__.create(bind=engine, checkfirst=True)
 
@@ -47,14 +49,19 @@ def validate(name: str, url: str, branch: str) -> tuple[str, str, str]:
     return name, url, branch
 
 
-def dto(repo: GitRepository) -> dict:
+def dto(repo: GitRepository, synced: GitSyncState | None = None) -> dict:
     return {"name": repo.name, "url": repo.url, "branch": repo.branch,
-            "status": "configured", "sync_enabled": False}
+            "status": "configured", "sync_enabled": False,
+            "sync_status": "synced" if synced else "not_synced",
+            "commit_sha": synced.commit_sha if synced else None,
+            "synced_at": synced.synced_at if synced else None}
 
 
 def list_repositories() -> list[dict]:
     with SessionLocal() as db:
-        return [dto(row) for row in db.scalars(select(GitRepository).order_by(GitRepository.name))]
+        states = {row.repository_name: row for row in db.scalars(select(GitSyncState))}
+        return [dto(row, states.get(row.name)) for row in
+                db.scalars(select(GitRepository).order_by(GitRepository.name))]
 
 
 def add_repository(name: str, url: str, branch: str = "main") -> dict:
@@ -76,6 +83,9 @@ def delete_repository(name: str) -> None:
         repo = db.scalar(select(GitRepository).where(GitRepository.name == name))
         if repo is None:
             raise HTTPException(404, "Nie znaleziono repozytorium")
+        state = db.scalar(select(GitSyncState).where(GitSyncState.repository_name == name))
+        if state is not None:
+            db.delete(state)
         db.delete(repo)
         db.commit()
 

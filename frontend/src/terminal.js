@@ -137,7 +137,7 @@ async function runCommand() {
         await openEditor(data.filename);
       } else {
         writeOutput(data.output);
-        if (/^(?:skr\\s+)?repository\\s+(?:add|delete)\\b/i.test(command) && !repositoryView.hidden)
+        if (/^(?:skr\\s+)?repository\\s+(?:add|delete|sync)\\b/i.test(command) && !repositoryView.hidden)
           void refreshRepositories();
       }
     }
@@ -382,7 +382,11 @@ async function refreshRepositories() {
       const info = repoText("div", "", "repo-details");
       const title = repoText("strong", repo.name + " · " + repo.branch);
       const url = repoText("span", repo.url, "repo-url");
-      const caption = repoText("span", "Konfiguracja zapisana · synchronizacja wyłączona", "repo-note");
+      const caption = repoText("span",
+        repo.sync_status === "synced"
+          ? "Ostatnio pobrano: " + repo.synced_at + " · " + repo.commit_sha.slice(0, 12)
+          : "Nie synchronizowano · HTTPS lub SSH",
+        "repo-note");
       info.append(title, url, caption);
       const del = repoText("button", "Usuń", "repo-delete");
       del.type = "button";
@@ -399,7 +403,47 @@ async function refreshRepositories() {
           del.disabled = false;
         }
       });
-      item.append(info, del);
+      const actions = document.createElement("div");
+      actions.className = "repo-actions";
+      const sync = repoText("button", "Synchronizuj", "repo-sync");
+      sync.type = "button";
+      sync.setAttribute("aria-label", "Synchronizuj " + repo.name);
+      sync.addEventListener("click", async () => {
+        sync.disabled = true;
+        repoStatus.textContent = "Synchronizacja repozytorium " + repo.name + "...";
+        try {
+          await request("/api/repositories/" + encodeURIComponent(repo.name) + "/sync", { method: "POST" });
+          repoStatus.textContent = "Pobrano repozytorium " + repo.name + ".";
+          repoSnapshot = null;
+          await refreshRepositories();
+        } catch (error) {
+          repoStatus.textContent = error.message || "Synchronizacja nie powiodła się.";
+        } finally { sync.disabled = false; }
+      });
+      function addFileButton(kind, title) {
+        const button = repoText("button", title, "repo-sync");
+        button.type = "button";
+        button.setAttribute("aria-label", "Pokaż " + title + " w " + repo.name);
+        button.addEventListener("click", async () => {
+          repoStatus.textContent = "Odczytywanie: " + title + "...";
+          try {
+            const endpoint = "/api/repositories/" + encodeURIComponent(repo.name)
+              + "/files?kind=" + encodeURIComponent(kind);
+            const payload = await request(endpoint);
+            repoStatus.textContent = payload.files.length
+              ? title + " — " + repo.name + ": " + payload.files.join(", ")
+              : "Brak plików: " + title + ".";
+          } catch (error) {
+            repoStatus.textContent = error.message || "Odczyt nie powiódł się.";
+          }
+        });
+        actions.append(button);
+      }
+      actions.append(sync);
+      addFileButton("inventory", "Inventory");
+      addFileButton("playbooks", "Playbooki");
+      actions.append(del);
+      item.append(info, actions);
       repoList.append(item);
     }
   } catch (error) {
@@ -429,7 +473,7 @@ repoForm.addEventListener("submit", async event => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    repoStatus.textContent = "Dodano " + saved.name + ". Synchronizacja Git nie jest jeszcze dostępna.";
+    repoStatus.textContent = "Dodano " + saved.name + ". Możesz rozpocząć synchronizację HTTPS lub SSH.";
     repoForm.reset();
     await refreshRepositories();
   } catch (error) {
