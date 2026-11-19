@@ -420,20 +420,29 @@ async function refreshRepositories() {
           repoStatus.textContent = error.message || "Synchronizacja nie powiodła się.";
         } finally { sync.disabled = false; }
       });
-      const showFiles = repoText("button", "Pliki", "repo-sync");
-      showFiles.type = "button";
-      showFiles.setAttribute("aria-label", "Pokaż inventory " + repo.name);
-      showFiles.addEventListener("click", async () => {
-        repoStatus.textContent = "Odczytywanie inventory...";
-        try {
-          const base = "/api/repositories/" + encodeURIComponent(repo.name) + "/files?kind=inventory";
-          const payload = await request(base);
-          repoStatus.textContent = payload.files.length
-            ? "Inventory " + repo.name + ": " + payload.files.join(", ")
-            : "Brak plików inventory.";
-        } catch (error) { repoStatus.textContent = error.message || "Odczyt nie powiódł się."; }
-      });
-      actions.append(sync, showFiles, del);
+      function addFileButton(kind, title) {
+        const button = repoText("button", title, "repo-sync");
+        button.type = "button";
+        button.setAttribute("aria-label", "Pokaż " + title + " w " + repo.name);
+        button.addEventListener("click", async () => {
+          repoStatus.textContent = "Odczytywanie: " + title + "...";
+          try {
+            const endpoint = "/api/repositories/" + encodeURIComponent(repo.name)
+              + "/files?kind=" + encodeURIComponent(kind);
+            const payload = await request(endpoint);
+            repoStatus.textContent = payload.files.length
+              ? title + " — " + repo.name + ": " + payload.files.join(", ")
+              : "Brak plików: " + title + ".";
+          } catch (error) {
+            repoStatus.textContent = error.message || "Odczyt nie powiódł się.";
+          }
+        });
+        actions.append(button);
+      }
+      actions.append(sync);
+      addFileButton("inventory", "Inventory");
+      addFileButton("playbooks", "Playbooki");
+      actions.append(del);
       item.append(info, actions);
       repoList.append(item);
     }
