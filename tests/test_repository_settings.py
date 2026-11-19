@@ -104,7 +104,7 @@ def test_repository_panel_uses_sse_with_fallback():
 
 
 def test_sse_fingerprint_changes_with_repository_configuration(repository_database):
-    from backend.app.main import repository_fingerprint
+    from backend.app.repositories import repository_fingerprint
     before = repository_fingerprint()
     repositories.add_repository("ansible", "https://git.example.org/a/repo.git")
     after = repository_fingerprint()
