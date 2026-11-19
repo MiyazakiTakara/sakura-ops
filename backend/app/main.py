@@ -162,6 +162,7 @@ def me(request: Request):
 # SakuraOps Console v0.1
 from pydantic import BaseModel, Field
 from .commands import interpret, complete
+from .console_completion import context_complete
 from .workspace import list_files, read_text, write_text
 from .inventory import discover
 from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
@@ -275,9 +276,12 @@ class CompletionRequest(BaseModel):
 
 @app.post("/api/console/complete")
 def console_complete(request: Request, body: CompletionRequest):
-    require_console_session(request)
+    user = require_console_session(request)
     mode = request.session.get("console_mode", "exec")
-    return {"matches": complete(body.prefix, mode)}
+    if user["role"] != "admin":
+        return {"matches": complete(body.prefix, mode)}
+    matches, hint = context_complete(body.prefix, mode)
+    return {"matches": matches, "hint": hint}
 
 
 def require_console_session(request: Request, *, edit: bool = False):
