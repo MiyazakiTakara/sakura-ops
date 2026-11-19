@@ -99,12 +99,12 @@ def interpret(command: str, mode: str = "exec") -> dict:
     if name == "show" and len(args) in (2, 3) and lowered[1] in ("hosts", "groups"):
         topic = lowered[1]
         return result(
-            "Składnia: show " + topic + " <repozytorium> <plik_inventory>\\n"
+            "Składnia: show " + topic + " <repozytorium> <plik_inventory>\n"
             "Przykład: show " + topic + " ansible inventory/hosts.ini"
         )
     if name == "task" and mode == "exec" and lowered[1:2] == ["plan"] and len(args) < 6:
         return result(
-            "Składnia: task plan <repozytorium> <plik_inventory> <playbook> <grupa>\\n"
+            "Składnia: task plan <repozytorium> <plik_inventory> <playbook> <grupa>\n"
             "Przykład: task plan ansible inventory/hosts.ini "
             "playbooks/linux-inventory.yml linux"
         )
