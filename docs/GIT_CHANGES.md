@@ -7,6 +7,8 @@ Wejdź w **Repozytoria → Zmiany Git**, wybierz repozytorium i kliknij
 śledzone przez Git pliki `inventory/`, `inventories/`, `playbook/` oraz
 `playbooks/`. Wybierz pliki, wpisz opis i świadomie utwórz **lokalny commit**.
 
+Panel pokazuje także liczbę commitów **przed/za** lokalnie zapamiętanym `origin/<branch>`. Gdy brak commitów oczekujących na wysłanie lub brak gałęzi śledzonej, przycisk push jest nieaktywny. Backend odrzuca push także przez CLI. To porównanie dotyczy lokalnego stanu tracking ref: nie jest osobnym zapytaniem do Forgejo; zmiany wykonane na serwerze później mogą spowodować odrzucenie push (non-fast-forward).
+
 Samo utworzenie commita **nie wysyła niczego do Forgejo**. Oddzielny
 przycisk **Wyślij do Forgejo (push)** wymaga potwierdzenia i nie używa
 `--force`. W przypadku zmiany zdalnej gałęzi Git odmówi non-fast-forward.
