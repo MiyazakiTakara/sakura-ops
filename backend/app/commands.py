@@ -3,7 +3,7 @@ import shlex
 
 VERSION = "0.2.0-dev"
 ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end")
-SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories")
+SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
@@ -20,6 +20,8 @@ COMMANDS = {
     "show repositories": "Lista repozytoriów Git (konfiguracja)",
     "repository add <name> <url> [branch]": "Dodaj repozytorium w trybie konfiguracji",
     "repository delete <name>": "Usuń repozytorium w trybie konfiguracji",
+    "repository sync <name>": "Ręcznie pobierz dane repozytorium (SSH, tylko odczyt)",
+    "show repository <name> inventory|playbooks": "Lista plików z cache Git",
 }
 
 
@@ -68,8 +70,12 @@ def interpret(command: str, mode: str = "exec") -> dict:
 
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
+    if name == "repository" and mode == "exec" and len(args) == 3 and lowered[1] == "sync":
+        return result("", action="repository-sync", name=args[2])
+    if name == "show" and len(args) == 4 and lowered[1] == "repository" and lowered[3] in ("inventory", "playbooks"):
+        return result("", action="repository-files", name=args[2], kind=lowered[3])
     if name == "show" and len(args) == 1:
-        return result("Dostępne: version, status, servers, inventory, playbooks, commands, repositories")
+        return result("Dostępne: version, status, servers, inventory, playbooks, commands, repositories, repository")
     if name == "show" and len(args) == 2:
         key = lowered[1]
         if key == "version":
