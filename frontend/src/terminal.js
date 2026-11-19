@@ -678,12 +678,12 @@ changesCommit.addEventListener("click", async () => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ files, message, expected_head: head }),
     });
-    changesStatus.textContent = "Utworzono lokalny commit " + result.commit_sha.slice(0, 12) + ".";
     changesMessage.value = "";
     await refreshGitChanges();
+    changesStatus.textContent = "Utworzono lokalny commit " + result.commit_sha.slice(0, 12) + ". Bez push.";
   } catch (error) {
-    changesStatus.textContent = error.message || "Nie udało się utworzyć commita.";
     await refreshGitChanges();
+    changesStatus.textContent = error.message || "Nie udało się utworzyć commita.";
   }
 });
 changesPush.addEventListener("click", async () => {
@@ -699,11 +699,11 @@ changesPush.addEventListener("click", async () => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expected_head: head }),
     });
+    await refreshGitChanges();
     changesStatus.textContent = "Push zakończony: " + response.pushed_sha.slice(0, 12);
-    await refreshGitChanges();
   } catch (error) {
-    changesStatus.textContent = error.message || "Push nie powiódł się.";
     await refreshGitChanges();
+    changesStatus.textContent = error.message || "Push nie powiódł się.";
   }
 });
 
