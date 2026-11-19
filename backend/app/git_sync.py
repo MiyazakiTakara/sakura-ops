@@ -1,15 +1,14 @@
-"""Manual, read-only Git fetch using a pinned SSH identity and host key.
+"""Synchronizacja normalnych katalogów roboczych Git dla SakuraOps.
 
-This module never checks out files, executes Ansible, or uses credentials
-provided in a command. It operates on bare Git repositories only.
+Korzysta z konfiguracji SSH, credential helperów i CA użytkownika usługi.
+Nigdy nie wykonuje Ansible, git push ani poleceń powłoki dostarczonych przez UI.
 """
-import base64
 import fcntl
 import os
 import re
-import shlex
-import signal
+import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -21,189 +20,156 @@ from .database import DATA_DIR, SessionLocal, engine
 from .models import GitRepository, GitSyncState
 
 GitSyncState.__table__.create(bind=engine, checkfirst=True)
-MIRRORS = DATA_DIR / "git_mirrors"
-MIRRORS.mkdir(parents=True, exist_ok=True, mode=0o700)
+WORKTREES = DATA_DIR / "git_worktrees"
+WORKTREES.mkdir(parents=True, exist_ok=True, mode=0o700)
+NAME = re.compile(r"[a-z][a-z0-9_-]{1,39}\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
-REF = "refs/sakuraops/synced"
 
 
-def _allowed_host(url: str) -> tuple[str, str]:
-    parsed = urlsplit(url)
-    if (parsed.scheme not in ("ssh", "https") or not parsed.hostname or
-        parsed.password or parsed.query or parsed.fragment or
-        (parsed.username and (parsed.scheme == "https" or parsed.username != "git"))):
-        raise HTTPException(422, "Dozwolony jest HTTPS lub ssh://git@host/repo")
-    if parsed.scheme == "https" and parsed.port not in (None, 443):
-        raise HTTPException(422, "HTTPS musi używać portu 443")
-    if parsed.scheme == "ssh" and parsed.port not in (None, 22, 2222):
-        raise HTTPException(422, "Nieprawidłowy port SSH")
-    allowed = {h.strip().lower() for h in
-               os.getenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "").split(",") if h.strip()}
-    if parsed.hostname.lower() not in allowed:
-        raise HTTPException(403, "Host Git nie jest dopuszczony do synchronizacji")
-    return parsed.scheme, parsed.hostname.lower()
+def _location(name: str) -> Path:
+    if not NAME.fullmatch(name):
+        raise HTTPException(400, "Nieprawidłowa nazwa repozytorium")
+    return WORKTREES / name
 
 
-def _settings(url: str) -> tuple[str, list[str]]:
-    scheme, host = _allowed_host(url)
-    if scheme != "ssh":
-        raise HTTPException(422, "To nie jest adres SSH")
-    key = Path(os.getenv("SAKURAOPS_GIT_SSH_KEY", ""))
-    known = Path(os.getenv("SAKURAOPS_GIT_KNOWN_HOSTS", ""))
-    if not key.is_file() or key.is_symlink() or not known.is_file() or known.is_symlink():
-        raise HTTPException(409, "Skonfiguruj klucz deploy SSH i zweryfikowany known_hosts")
-    if key.stat().st_mode & 0o077:
-        raise HTTPException(409, "Klucz prywatny SSH musi mieć uprawnienia 0600")
-    ssh = [
-        "ssh", "-F", "/dev/null", "-i", str(key.resolve()),
-        "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-        "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + str(known.resolve()),
-        "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ProxyCommand=none",
-        "-o", "ProxyJump=none", "-o", "ForwardAgent=no",
-        "-o", "ConnectTimeout=8",
-    ]
-    return host, ssh
+def _check_remote(url: str) -> None:
+    """Reject local protocols and optionally enforce an administrator host allowlist."""
+    try:
+        remote = urlsplit(url)
+        host = remote.hostname
+        port = remote.port
+    except ValueError as exc:
+        raise HTTPException(422, "Nieprawidłowy adres Git") from exc
+    if (remote.scheme not in ("https", "ssh") or not host or
+        remote.password or remote.query or remote.fragment or
+        (remote.scheme == "https" and remote.username) or
+        (remote.scheme == "ssh" and remote.username not in (None, "git")) or
+        (remote.scheme == "https" and port not in (None, 443)) or
+        (remote.scheme == "ssh" and port not in (None, 22, 2222)) or
+        not remote.path or remote.path == "/"):
+        raise HTTPException(422, "Wymagany adres HTTPS lub ssh://git@host/repo")
+    allowed = {host.strip().lower() for host in
+               os.getenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "").split(",") if host.strip()}
+    if allowed and host.lower() not in allowed:
+        raise HTTPException(403, "Host Git nie znajduje się na liście dozwolonych")
 
 
-def _https_credentials(name: str) -> dict[str, str]:
-    """Optional token stored in a private file, never entered in the console."""
-    env_name = "SAKURAOPS_GIT_TOKEN_FILE_" + name.upper().replace("-", "_")
-    value = os.getenv(env_name)
-    if not value:
-        return {}
-    path = Path(value)
-    if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
-        raise HTTPException(409, "Plik tokenu HTTPS musi istnieć i mieć uprawnienia 0600")
-    token = path.read_text(encoding="utf-8").strip()
-    if not token or len(token) > 4096 or "\n" in token:
-        raise HTTPException(409, "Nieprawidłowy token HTTPS")
-    return {
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "http.extraHeader",
-        "GIT_CONFIG_VALUE_0": "Authorization: Basic " + base64.b64encode(
-            (os.getenv("SAKURAOPS_GIT_HTTPS_USER", "oauth2") + ":" + token).encode()
-        ).decode(),
-    }
-
-
-def _git(args: list[str], ssh: list[str] | None = None,
-         credentials: dict[str, str] | None = None) -> str:
+def _git(args: list[str], timeout: int = 90) -> str:
+    """Normal Git with current service user's credentials, noninteractive in web calls."""
     env = dict(os.environ)
     for key in list(env):
-        if key.startswith(("GIT_CONFIG_", "GIT_ASKPASS", "GIT_SSH", "SSH_ASKPASS")):
+        if key.startswith(("GIT_CONFIG_", "GIT_ASKPASS", "GIT_SSH", "SSH_ASKPASS")) or key in (
+            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_CEILING_DIRECTORIES",
+            "GIT_TEMPLATE_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        ):
             env.pop(key, None)
-    env["GIT_CONFIG_NOSYSTEM"] = "1"
-    env["GIT_CONFIG_GLOBAL"] = os.devnull
     env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ALLOW_PROTOCOL"] = "ssh:https"
-    if ssh:
-        env["GIT_SSH_COMMAND"] = shlex.join(ssh)
-    if credentials:
-        env.update(credentials)
-    cmd = ["git", "-c", "core.hooksPath=/dev/null",
-           "-c", "credential.helper=",
-           "-c", "http.followRedirects=false",
-           "-c", "protocol.file.allow=never",
-           "-c", "protocol.ext.allow=never",
-           "-c", "fetch.recurseSubmodules=false", *args]
-    process = subprocess.Popen(
-        cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        text=True, start_new_session=True,
-    )
+    env["GIT_ALLOW_PROTOCOL"] = "https:ssh"
+    env["GIT_LFS_SKIP_SMUDGE"] = "1"
+    command = [
+        "git", "-c", "core.hooksPath=/dev/null",
+        "-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never",
+        "-c", "fetch.recurseSubmodules=false",
+        *args,
+    ]
     try:
-        stdout, _ = process.communicate(timeout=50)
+        run = subprocess.run(command, env=env, input="", text=True,
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             timeout=timeout, check=False)
     except subprocess.TimeoutExpired as exc:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.communicate()
-        raise HTTPException(504, "Przekroczono limit czasu synchronizacji Git") from exc
-    if process.returncode:
-        raise HTTPException(502, "Operacja Git nie powiodła się (sprawdź SSH, gałąź i dostęp)")
-    return stdout.strip()
+        raise HTTPException(504, "Przekroczony czas wykonania Git") from exc
+    except OSError as exc:
+        raise HTTPException(500, "Program Git jest niedostępny") from exc
+    if run.returncode:
+        raise HTTPException(502, "Operacja Git nie powiodła się. Sprawdź dostęp, gałąź i konfigurację Git użytkownika usługi")
+    return run.stdout.strip()
 
 
-def _mirror(name: str) -> Path:
-    if not re.fullmatch(r"[a-z][a-z0-9_-]{1,39}", name):
-        raise HTTPException(400, "Nieprawidłowa nazwa repozytorium")
-    return MIRRORS / (name + ".git")
-
-
-def _cached_sha(name: str) -> str | None:
+def _config(name: str) -> tuple[str, str]:
     with SessionLocal() as db:
-        row = db.scalar(select(GitSyncState).where(GitSyncState.repository_name == name))
-        return row.commit_sha if row is not None else None
+        repo = db.scalar(select(GitRepository).where(GitRepository.name == name))
+        if repo is None:
+            raise HTTPException(404, "Nie znaleziono repozytorium")
+        return repo.url, repo.branch
 
 
 def synchronization_status(name: str) -> dict:
     with SessionLocal() as db:
-        row = db.scalar(select(GitSyncState).where(GitSyncState.repository_name == name))
-        if row is None:
+        item = db.scalar(select(GitSyncState).where(GitSyncState.repository_name == name))
+        if item is None:
             return {"sync_status": "not_synced", "commit_sha": None, "synced_at": None}
-        return {"sync_status": "synced", "commit_sha": row.commit_sha, "synced_at": row.synced_at}
+        return {"sync_status": "synced", "commit_sha": item.commit_sha, "synced_at": item.synced_at}
 
 
 def synchronize(name: str) -> dict:
-    with SessionLocal() as db:
-        repo = db.scalar(select(GitRepository).where(GitRepository.name == name))
-        if repo is None:
-            raise HTTPException(404, "Nie znaleziono repozytorium")
-        url, branch = repo.url, repo.branch
-    scheme, _ = _allowed_host(url)
-    ssh = _settings(url)[1] if scheme == "ssh" else None
-    credentials = _https_credentials(name) if scheme == "https" else None
-    mirror = _mirror(name)
-    lock_path = MIRRORS / (name + ".lock")
-    lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    url, branch = _config(name)
+    _check_remote(url)
+    target = _location(name)
+    lock = WORKTREES / (name + ".lock")
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
-            raise HTTPException(409, "Synchronizacja repozytorium już trwa") from exc
-        if mirror.is_symlink():
-            raise HTTPException(409, "Nieprawidłowa ścieżka repozytorium")
-        if not mirror.exists():
-            mirror.mkdir(mode=0o700)
-            _git(["init", "--bare", str(mirror)])
-        if not mirror.is_dir():
-            raise HTTPException(409, "Nieprawidłowy katalog repozytorium")
-        # No shell expansion, no checkout, no submodules and no git hooks.
-        _git(["-C", str(mirror), "fetch", "--no-tags", "--depth=1",
-              "--", url, branch], ssh, credentials)
-        commit_sha = _git(["-C", str(mirror), "rev-parse", "--verify", "FETCH_HEAD"])
-        if not SHA.fullmatch(commit_sha):
-            raise HTTPException(502, "Nieprawidłowy identyfikator Git")
-        _git(["-C", str(mirror), "update-ref", REF, commit_sha])
+            raise HTTPException(409, "Synchronizacja już trwa") from exc
+
+        if target.is_symlink():
+            raise HTTPException(409, "Nieprawidłowy katalog Git")
+        if not target.exists():
+            temporary = Path(tempfile.mkdtemp(prefix=".git-import-", dir=WORKTREES))
+            try:
+                checkout = temporary / "checkout"
+                _git(["clone", "--single-branch", "--no-tags", "--no-recurse-submodules",
+                      "--branch", branch, "--", url, str(checkout)])
+                sha = _git(["-C", str(checkout), "rev-parse", "--verify", "HEAD"])
+                if not SHA.fullmatch(sha):
+                    raise HTTPException(502, "Nieprawidłowy commit Git")
+                if target.exists():
+                    raise HTTPException(409, "Katalog repozytorium już istnieje")
+                checkout.rename(target)
+            finally:
+                shutil.rmtree(temporary, ignore_errors=True)
+        else:
+            if not target.is_dir() or not (target / ".git").is_dir():
+                raise HTTPException(409, "Katalog nie jest zwykłym repozytorium Git")
+            if _git(["-C", str(target), "config", "--get", "remote.origin.url"]) != url:
+                raise HTTPException(409, "Adres origin różni się od konfiguracji SakuraOps")
+            if _git(["-C", str(target), "branch", "--show-current"]) != branch:
+                raise HTTPException(409, "Gałąź robocza nie zgadza się z konfiguracją")
+            if _git(["-C", str(target), "status", "--porcelain", "--untracked-files=all"]):
+                raise HTTPException(409, "Lokalne zmiany Git: synchronizacja nie nadpisze plików")
+            _git(["-C", str(target), "fetch", "--no-tags", "--no-recurse-submodules",
+                  "--", "origin", branch])
+            _git(["-C", str(target), "merge", "--ff-only", "FETCH_HEAD"])
+            sha = _git(["-C", str(target), "rev-parse", "--verify", "HEAD"])
+            if not SHA.fullmatch(sha):
+                raise HTTPException(502, "Nieprawidłowy commit Git")
+
         stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with SessionLocal() as db:
-            state = db.scalar(select(GitSyncState).where(GitSyncState.repository_name == name))
-            if state is None:
-                state = GitSyncState(repository_name=name, commit_sha=commit_sha, synced_at=stamp)
-                db.add(state)
+            row = db.scalar(select(GitSyncState).where(GitSyncState.repository_name == name))
+            if row is None:
+                db.add(GitSyncState(repository_name=name, commit_sha=sha, synced_at=stamp))
             else:
-                state.commit_sha = commit_sha
-                state.synced_at = stamp
+                row.commit_sha = sha
+                row.synced_at = stamp
             db.commit()
         return synchronization_status(name)
     finally:
-        os.close(lock_fd)
+        os.close(fd)
 
 
 def list_cached_files(name: str, kind: str) -> list[str]:
     if kind not in ("inventory", "playbooks"):
-        raise HTTPException(422, "Dozwolone rodzaje: inventory, playbooks")
-    with SessionLocal() as db:
-        repo = db.scalar(select(GitRepository).where(GitRepository.name == name))
-        if repo is None:
-            raise HTTPException(404, "Nie znaleziono repozytorium")
-    commit_sha = _cached_sha(name)
-    if not commit_sha:
-        raise HTTPException(409, "Najpierw wykonaj synchronizację Git")
-    mirror = _mirror(name)
-    if mirror.is_symlink() or not mirror.is_dir():
-        raise HTTPException(409, "Nie znaleziono lokalnego cache Git")
-    output = _git(["-C", str(mirror), "ls-tree", "-r", "--name-only", commit_sha])
-    folders = ("inventory/", "inventories/") if kind == "inventory" else ("playbook/", "playbooks/")
+        raise HTTPException(422, "Wybierz inventory albo playbooks")
+    _config(name)
+    target = _location(name)
+    if target.is_symlink() or not target.is_dir() or not (target / ".git").is_dir():
+        raise HTTPException(409, "Najpierw zsynchronizuj repozytorium Git")
+    paths = ("inventory", "inventories") if kind == "inventory" else ("playbook", "playbooks")
+    output = _git(["-C", str(target), "ls-files", "--", *paths])
     return sorted(
-        x for x in output.splitlines()
-        if x.startswith(folders) and x.endswith((".ini", ".yml", ".yaml"))
-        and ".." not in x.split("/")
+        line for line in output.splitlines()
+        if line.endswith((".ini", ".yaml", ".yml")) and
+        len(line) <= 500 and ".." not in line.split("/")
     )[:200]
