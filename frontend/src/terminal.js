@@ -409,6 +409,8 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", updateRepositoriesWhenVisible);
 
+const navServers = document.getElementById("nav-servers");
+const serversView = document.getElementById("servers-view");
 const navInventory = document.getElementById("nav-inventory");
 const navPlaybooks = document.getElementById("nav-playbooks");
 const filesView = document.getElementById("files-view");
@@ -418,12 +420,15 @@ function setView(view) {
   if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
       !confirm("Odrzucić niezapisane zmiany w pliku Git?")) return false;
   const showRepo = view === "repositories";
+  const showServers = view === "servers";
   const showFiles = view === "inventory" || view === "playbooks";
-  dashboardView.hidden = showRepo || showFiles;
+  dashboardView.hidden = showRepo || showFiles || showServers;
+  serversView.hidden = !showServers;
   repositoryView.hidden = !showRepo;
   filesView.hidden = !showFiles;
   const menu = [
     [navDashboard, view === "dashboard"],
+    [navServers, showServers],
     [navRepositories, showRepo],
     [navInventory, view === "inventory"],
     [navPlaybooks, view === "playbooks"],
@@ -432,6 +437,7 @@ function setView(view) {
     if (selected) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
   }
+  if (showServers) void loadServerRepositories();
   if (showRepo) {
     void refreshRepositories();
     void loadChangeRepositories();
@@ -452,6 +458,7 @@ function setView(view) {
   return true;
 }
 navDashboard.addEventListener("click", () => setView("dashboard"));
+navServers.addEventListener("click", () => setView("servers"));
 navRepositories.addEventListener("click", () => setView("repositories"));
 navInventory.addEventListener("click", () => setView("inventory"));
 navPlaybooks.addEventListener("click", () => setView("playbooks"));
@@ -714,6 +721,97 @@ changesPush.addEventListener("click", async () => {
     changesStatus.textContent = error.message || "Push nie powiódł się.";
   }
 });
+
+const serverRepo = document.getElementById("servers-repository");
+const serverFile = document.getElementById("servers-inventory");
+const serverStatus = document.getElementById("servers-status");
+const serverGroups = document.getElementById("servers-groups");
+const serverHosts = document.getElementById("servers-hosts");
+let serverReadRequest = 0;
+
+async function loadServerRepositories() {
+  const requestId = ++serverReadRequest;
+  serverRepo.replaceChildren();
+  serverFile.replaceChildren();
+  serverGroups.replaceChildren();
+  serverHosts.replaceChildren();
+  serverStatus.textContent = "Odczytywanie repozytoriów...";
+  try {
+    const data = await request("/api/repositories");
+    if (requestId !== serverReadRequest) return;
+    for (const item of data.repositories) {
+      const option = document.createElement("option");
+      option.value = item.name;
+      option.textContent = item.name + " · " + item.branch;
+      serverRepo.append(option);
+    }
+    await loadServerInventories(requestId);
+  } catch (error) {
+    serverStatus.textContent = error.message || "Nie udało się odczytać repozytoriów.";
+  }
+}
+async function loadServerInventories(requestId = ++serverReadRequest) {
+  serverFile.replaceChildren();
+  serverGroups.replaceChildren();
+  serverHosts.replaceChildren();
+  for (const id of ["servers-host-count", "servers-group-count", "servers-parser"]) {
+    document.getElementById(id).textContent = "—";
+  }
+  if (!serverRepo.value) {
+    serverStatus.textContent = "Najpierw dodaj i zsynchronizuj repozytorium Git.";
+    return;
+  }
+  const name = serverRepo.value;
+  try {
+    const data = await request("/api/repositories/" + encodeURIComponent(name) + "/files?kind=inventory");
+    if (requestId !== serverReadRequest || name !== serverRepo.value) return;
+    for (const filename of data.files) {
+      const option = document.createElement("option");
+      option.value = filename;
+      option.textContent = filename;
+      serverFile.append(option);
+    }
+    if (data.files.length) await readServerInventory(requestId);
+    else serverStatus.textContent = "Nie znaleziono plików inventory w repozytorium.";
+  } catch (error) {
+    if (requestId === serverReadRequest) serverStatus.textContent = error.message || "Błąd odczytu inventory.";
+  }
+}
+async function readServerInventory(requestId = ++serverReadRequest) {
+  const name = serverRepo.value;
+  const path = serverFile.value;
+  if (!name || !path) return;
+  serverStatus.textContent = "Analiza inventory (bez uruchamiania Ansible)...";
+  try {
+    const data = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/inventory-preview?path=" + encodeURIComponent(path));
+    if (requestId !== serverReadRequest || name !== serverRepo.value || path !== serverFile.value) return;
+    document.getElementById("servers-host-count").textContent = String(data.host_count);
+    document.getElementById("servers-group-count").textContent = String(data.group_count);
+    document.getElementById("servers-parser").textContent = data.parser;
+    serverGroups.replaceChildren();
+    serverHosts.replaceChildren();
+    for (const group of data.groups) {
+      const card = repoText("div", "", "server-group");
+      card.append(repoText("strong", group.name + " · " + group.host_count));
+      card.append(repoText("span", group.hosts.length ? group.hosts.join(", ") : "Brak hostów", "repo-note"));
+      if (group.children.length) card.append(
+        repoText("span", "Podgrupy: " + group.children.join(", "), "repo-note"));
+      serverGroups.append(card);
+    }
+    for (const host of data.hosts) serverHosts.append(repoText("span", host, "server-host"));
+    serverStatus.textContent = "Odczytano " + path + ". Tylko statyczne hosty i grupy; zmienne są ukryte.";
+  } catch (error) {
+    if (requestId === serverReadRequest) {
+      serverGroups.replaceChildren();
+      serverHosts.replaceChildren();
+      serverStatus.textContent = error.message || "Nie udało się przeanalizować inventory.";
+    }
+  }
+}
+serverRepo.addEventListener("change", () => { void loadServerInventories(); });
+serverFile.addEventListener("change", () => { void readServerInventory(); });
+document.getElementById("servers-refresh").addEventListener("click", () => { void loadServerInventories(); });
 
 const fileRepoSelect = document.getElementById("files-repository");
 const gitFilesList = document.getElementById("git-files-list");
