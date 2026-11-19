@@ -32,7 +32,7 @@ terminal.write("\r\n\x1b[32m" + prompt + "\x1b[0m");
 const narrow = () => matchMedia("(max-width:600px)").matches;
 function refit() { if (!win.hidden && !editorOpen) { fitAddon.fit(); terminal.focus(); } }
 function openTerminal() { win.hidden = false; requestAnimationFrame(refit); }
-function hideTerminal() { if (editorOpen) closeEditor(); win.hidden = true; document.getElementById("open-terminal").focus(); }
+function hideTerminal() { if (editorOpen && !closeEditor()) return; win.hidden = true; document.getElementById("open-terminal").focus(); }
 document.getElementById("open-terminal").addEventListener("click", openTerminal);
 document.getElementById("minimize").addEventListener("click", hideTerminal);
 document.getElementById("close").addEventListener("click", hideTerminal);
@@ -162,7 +162,7 @@ terminal.onData(async data => {
   if (data === "\x1b[A") { if (historyIndex > 0) replaceLine(history[--historyIndex]); return; }
   if (data === "\x1b[B") { if (historyIndex < history.length) historyIndex++; replaceLine(history[historyIndex] || ""); return; }
   if (data === "?") {
-    if (!line || line.endsWith(" ")) {
+    {
       terminal.write("\r\n");
       try {
         const result = await request("/api/console/complete", {
@@ -192,9 +192,10 @@ async function openEditor(filename) {
   editor.hidden = false; editorOpen = true; editorText.focus();
 }
 function closeEditor() {
-  if (editorText.value !== savedValue && !confirm("Odrzucić niezapisane zmiany?")) return;
+  if (editorText.value !== savedValue && !confirm("Odrzucić niezapisane zmiany?")) return false;
   editor.hidden = true; editorOpen = false; editingName = null;
   drawPrompt(); requestAnimationFrame(refit);
+  return true;
 }
 document.getElementById("editor-close").addEventListener("click", closeEditor);
 async function saveEditor() {
