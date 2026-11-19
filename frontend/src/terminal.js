@@ -134,7 +134,11 @@ async function runCommand() {
         writeOutput(file.content || "Plik nie istnieje albo jest pusty.");
       } else if (data.action === "edit") {
         await openEditor(data.filename);
-      } else writeOutput(data.output);
+      } else {
+        writeOutput(data.output);
+        if (/^(?:skr\\s+)?repository\\s+(?:add|delete)\\b/i.test(command) && !repositoryView.hidden)
+          void refreshRepositories();
+      }
     }
   } catch (error) {
     writeOutput(error.message || "Błąd połączenia");
@@ -266,6 +270,105 @@ document.getElementById("editor-open").addEventListener("click", () => {
   terminal.write("\r\n");
   writeOutput("Edytor: edit notatki.md lub nano inventory.ini");
   drawPrompt();
+});
+// Repository configuration is shared with the restricted CLI via the backend API.
+const dashboardView = document.getElementById("dashboard-view");
+const repositoryView = document.getElementById("repository-view");
+const navDashboard = document.getElementById("nav-dashboard");
+const navRepositories = document.getElementById("nav-repositories");
+const repoForm = document.getElementById("repo-form");
+const repoList = document.getElementById("repo-list");
+const repoStatus = document.getElementById("repo-status");
+let repoLoading = false;
+
+function setView(view) {
+  const showRepo = view === "repositories";
+  dashboardView.hidden = showRepo;
+  repositoryView.hidden = !showRepo;
+  if (showRepo) {
+    navRepositories.setAttribute("aria-current", "page");
+    navDashboard.removeAttribute("aria-current");
+    void refreshRepositories();
+  } else {
+    navDashboard.setAttribute("aria-current", "page");
+    navRepositories.removeAttribute("aria-current");
+  }
+}
+navDashboard.addEventListener("click", () => setView("dashboard"));
+navRepositories.addEventListener("click", () => setView("repositories"));
+
+function repoText(tag, text, className = "") {
+  const element = document.createElement(tag);
+  element.textContent = text;
+  if (className) element.className = className;
+  return element;
+}
+async function refreshRepositories() {
+  if (repoLoading) return;
+  repoLoading = true;
+  try {
+    const payload = await request("/api/repositories");
+    repoList.replaceChildren();
+    if (!payload.repositories.length) {
+      repoList.append(repoText("p", "Nie dodano jeszcze repozytoriów.", "repo-note"));
+      return;
+    }
+    for (const repo of payload.repositories) {
+      const item = document.createElement("div");
+      item.className = "repo-row";
+      const info = repoText("div", "", "repo-details");
+      const title = repoText("strong", repo.name + " · " + repo.branch);
+      const url = repoText("span", repo.url, "repo-url");
+      const caption = repoText("span", "Konfiguracja zapisana · synchronizacja wyłączona", "repo-note");
+      info.append(title, url, caption);
+      const del = repoText("button", "Usuń", "repo-delete");
+      del.type = "button";
+      del.setAttribute("aria-label", "Usuń konfigurację " + repo.name);
+      del.addEventListener("click", async () => {
+        if (!confirm("Usunąć konfigurację repozytorium " + repo.name + "?")) return;
+        del.disabled = true;
+        try {
+          await request("/api/repositories/" + encodeURIComponent(repo.name), { method: "DELETE" });
+          repoStatus.textContent = "Usunięto konfigurację " + repo.name + ".";
+          await refreshRepositories();
+        } catch (error) {
+          repoStatus.textContent = error.message || "Nie udało się usunąć.";
+          del.disabled = false;
+        }
+      });
+      item.append(info, del);
+      repoList.append(item);
+    }
+  } catch (error) {
+    repoList.replaceChildren(repoText("p", error.message || "Nie udało się odczytać repozytoriów.", "repo-note"));
+  } finally {
+    repoLoading = false;
+  }
+}
+repoForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const submit = document.getElementById("repo-submit");
+  submit.disabled = true;
+  repoStatus.textContent = "Zapisywanie konfiguracji...";
+  try {
+    const body = {
+      name: document.getElementById("repo-name").value.trim(),
+      url: document.getElementById("repo-url").value.trim(),
+      branch: document.getElementById("repo-branch").value.trim(),
+    };
+    const saved = await request("/api/repositories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    repoStatus.textContent = "Dodano " + saved.name + ". Synchronizacja Git nie jest jeszcze dostępna.";
+    repoForm.reset();
+    await refreshRepositories();
+  } catch (error) {
+    repoStatus.textContent = error.message || "Nie udało się dodać repozytorium.";
+  } finally {
+    submit.disabled = false;
+  }
 });
 fetch("/api/me", {credentials:"same-origin"}).then(r => r.ok ? r.json() : null)
   .then(data => { if(data?.username) document.getElementById("username").textContent = data.username; }).catch(()=>{});
