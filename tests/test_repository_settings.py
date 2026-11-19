@@ -126,7 +126,7 @@ def test_manual_sync_uses_pinned_ssh_and_no_checkout(repository_database, monkey
         assert url.startswith("ssh://git@")
         return "git.example.org", ["ssh", "-F", "/dev/null"]
 
-    def fake_git(args, ssh=None):
+    def fake_git(args, ssh=None, credentials=None):
         calls.append((args, ssh))
         if "rev-parse" in args:
             return "a" * 40
@@ -161,3 +161,49 @@ def test_sync_console_actions():
     result = interpret("show repository ansible inventory")
     assert result["action"] == "repository-files"
     assert result["kind"] == "inventory"
+
+
+def test_https_sync_without_token_uses_allowlisted_host(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    mirrors = tmp_path / "mirrors"
+    mirrors.mkdir()
+    monkeypatch.setattr(git_sync, "MIRRORS", mirrors)
+    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
+    calls = []
+
+    def fake_git(args, ssh=None, credentials=None):
+        calls.append((args, ssh, credentials))
+        if "rev-parse" in args:
+            return "b" * 40
+        return ""
+
+    monkeypatch.setattr(git_sync, "_git", fake_git)
+    repositories.add_repository("httpsrepo", "https://git.example.org/team/ansible.git")
+    result = git_sync.synchronize("httpsrepo")
+    assert result["commit_sha"] == "b" * 40
+    assert any("fetch" in args and ssh is None and credentials is None
+               for args, ssh, credentials in calls)
+
+
+def test_https_token_requires_private_file(monkeypatch, tmp_path):
+    from backend.app.git_sync import _https_credentials
+    token_file = tmp_path / "token"
+    token_file.write_text("secret")
+    monkeypatch.setenv("SAKURAOPS_GIT_TOKEN_FILE_ANSIBLE", str(token_file))
+    with pytest.raises(HTTPException):
+        _https_credentials("ansible")
+    token_file.chmod(0o600)
+    credentials = _https_credentials("ansible")
+    import base64
+    assert base64.b64decode(credentials["GIT_CONFIG_VALUE_0"].split("Basic ")[1]) == b"oauth2:secret"
+    assert "secret" not in str(credentials.keys())
+
+
+def test_https_rejects_hosts_not_allowlisted(monkeypatch):
+    from backend.app.git_sync import _allowed_host
+    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
+    with pytest.raises(HTTPException) as exc:
+        _allowed_host("https://unknown.example.org/team/ansible")
+    assert exc.value.status_code == 403
+    assert _allowed_host("https://git.example.org/team/ansible")[0] == "https"
