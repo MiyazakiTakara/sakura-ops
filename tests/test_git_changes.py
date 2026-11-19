@@ -77,11 +77,15 @@ def test_selective_commit_and_nonforce_push(working_repo):
     (root / "playbooks" / "audit.yml").write_text("- hosts: localhost\n")
     status = git_changes.git_status("ansible")
     assert status["head"] == old
+    assert status["ahead"] == 0
+    assert status["can_push"] is False
     assert status["modified_files"] == ["inventory/hosts.ini", "playbooks/audit.yml"]
     committed = git_changes.commit_selected(
         "ansible", ["inventory/hosts.ini"], "Update inventory", old
     )
     assert committed["commit_sha"] != old
+    assert git_changes.git_status("ansible")["ahead"] == 1
+    assert git_changes.git_status("ansible")["can_push"] is True
     assert git("-C", root, "show", "--format=", "--name-only", "HEAD") == "inventory/hosts.ini"
     assert git_changes.git_status("ansible")["modified_files"] == ["playbooks/audit.yml"]
     assert git("-C", bare, "rev-parse", "refs/heads/main") == old
@@ -92,6 +96,31 @@ def test_selective_commit_and_nonforce_push(working_repo):
     pushed = git_changes.push_explicit("ansible", committed["commit_sha"])
     assert pushed["pushed_sha"] == committed["commit_sha"]
     assert git("-C", bare, "rev-parse", "refs/heads/main") == committed["commit_sha"]
+    assert git_changes.git_status("ansible")["ahead"] == 0
+    assert git_changes.git_status("ansible")["can_push"] is False
+
+
+def test_push_denied_when_no_commits_ahead(working_repo):
+    root, bare = working_repo
+    sha = git("-C", root, "rev-parse", "HEAD")
+    current = git("-C", bare, "rev-parse", "refs/heads/main")
+    assert git_changes.git_status("ansible")["ahead"] == 0
+    with pytest.raises(HTTPException) as error:
+        git_changes.push_explicit("ansible", sha)
+    assert error.value.status_code == 409
+    assert git("-C", bare, "rev-parse", "refs/heads/main") == current
+
+
+def test_push_denied_without_tracking_ref(working_repo):
+    root, _ = working_repo
+    sha = git("-C", root, "rev-parse", "HEAD")
+    git("-C", root, "update-ref", "-d", "refs/remotes/origin/main")
+    status = git_changes.git_status("ansible")
+    assert status["ahead"] is None
+    assert status["can_push"] is False
+    with pytest.raises(HTTPException) as error:
+        git_changes.push_explicit("ansible", sha)
+    assert error.value.status_code == 409
 
 
 def test_commit_rejects_unknown_file_stale_sha_and_empty_message(working_repo):
