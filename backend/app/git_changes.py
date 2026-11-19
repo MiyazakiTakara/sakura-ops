@@ -62,14 +62,31 @@ def _modified_paths(name: str, target: Path) -> list[str]:
     return sorted(x for x in paths if x in allowed and "\n" not in x and "\r" not in x)
 
 
+def _tracking_counts(target: Path, branch: str) -> tuple[int | None, int | None]:
+    """Compare against the locally stored origin branch; no network request."""
+    remote_ref = "refs/remotes/origin/" + branch
+    tracked = git_sync._git([
+        "-C", str(target), "for-each-ref", "--format=%(objectname)", remote_ref
+    ])
+    if not COMMIT_SHA.fullmatch(tracked):
+        return None, None
+    behind, ahead = git_sync._git([
+        "-C", str(target), "rev-list", "--left-right", "--count",
+        remote_ref + "...HEAD",
+    ]).split()
+    return int(behind), int(ahead)
+
+
 def git_status(name: str) -> dict:
     target, branch = _checked_worktree(name)
     sha = git_sync._git(["-C", str(target), "rev-parse", "--verify", "HEAD"])
     files = _modified_paths(name, target)
+    behind, ahead = _tracking_counts(target, branch)
     status = git_sync._git(["-C", str(target), "status", "--porcelain", "--untracked-files=all"])
     return {
         "repository": name, "branch": branch, "head": sha,
         "modified_files": files, "dirty": bool(status),
+        "ahead": ahead, "behind": behind, "can_push": ahead is not None and ahead > 0,
         "other_changes": bool(status) and not files,
     }
 
@@ -112,6 +129,11 @@ def push_explicit(name: str, expected_head: str) -> dict:
         head = git_sync._git(["-C", str(target), "rev-parse", "--verify", "HEAD"])
         if head != expected_head:
             raise HTTPException(409, "HEAD zmienił się od potwierdzenia. Odśwież status")
+        _, ahead = _tracking_counts(target, branch)
+        if ahead is None:
+            raise HTTPException(409, "Brak lokalnego origin/" + branch + " — najpierw zsynchronizuj Git")
+        if ahead == 0:
+            raise HTTPException(409, "Brak lokalnych commitów do wysłania")
         # A push is never forced and never starts from a periodic synchronizer.
         # A remote update will result in Git's default non-fast-forward rejection.
         git_sync._git(["-C", str(target), "push", "--porcelain",
