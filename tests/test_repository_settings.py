@@ -278,3 +278,26 @@ def test_git_file_pages_api_and_editor_present():
     assert "new EditorView" in js and "gitFileRevision" in js
     assert '@app.put("/api/repositories/{name}/content")' in api
     assert "require_console_session(request, edit=True)" in api
+
+
+def test_git_diff_is_read_only(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    monkeypatch.setattr(git_sync, "WORKTREES", tmp_path)
+    repositories.add_repository("ansible", "https://git.example.org/team/r.git")
+    root = tmp_path / "ansible"
+    (root / ".git").mkdir(parents=True)
+    (root / "inventory").mkdir()
+    (root / "inventory" / "hosts.ini").write_text("[all]", encoding="utf-8")
+    monkeypatch.setattr(git_sync, "list_cached_files",
+                        lambda name, kind: ["inventory/hosts.ini"] if kind == "inventory" else [])
+    seen = []
+    def fake_git(args, timeout=90):
+        seen.append(args)
+        return "diff --git a/inventory/hosts.ini b/inventory/hosts.ini"
+    monkeypatch.setattr(git_sync, "_git", fake_git)
+    result = git_sync.diff_repository_file("ansible", "inventory/hosts.ini")
+    assert result["diff"].startswith("diff --git")
+    assert any("diff" in args for args in seen)
+    assert all("push" not in args and "reset" not in args for args in seen)
+    assert interpret("show repository ansible diff inventory/hosts.ini")["action"] == "repository-diff"
