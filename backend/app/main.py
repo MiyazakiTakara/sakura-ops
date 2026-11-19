@@ -218,7 +218,7 @@ def console_execute(request: Request, body: ConsoleCommand):
             result["output"] = f"Synchronizacja zakończona: {state['commit_sha'][:12]}"
         elif action == "repository-files":
             paths = list_cached_files(result["name"], result["kind"])
-            result["output"] = "\\n".join(paths) if paths else "Brak pasujących plików."
+            result["output"] = "\n".join(paths) if paths else "Brak pasujących plików."
         else:
             delete_repository(result["name"])
             result["output"] = f"Usunięto konfigurację {result['name']}."
