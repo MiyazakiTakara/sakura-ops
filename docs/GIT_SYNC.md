@@ -1,4 +1,4 @@
-# Manual Git synchronization (development preview)
+# Manual HTTPS and SSH Git synchronization (development preview)
 
 **No production Ansible actions.** This implementation fetches Git objects into a
 **bare** local cache and displays names of inventory/playbook files. It never
@@ -7,16 +7,16 @@ the Semaphore service.
 
 ## Configuration through GUI or `skr`
 
-First add the remote through the **Repozytoria** view, or in SakuraOps terminal:
+First add the remote through the **Repozytoria** view, or in SakuraOps terminal. Both HTTPS and SSH are supported:
 
 ```text
 SakuraOps# configure terminal
-SakuraOps(config)# repository add ansible ssh://git@git.amuz.wroc.pl/patryk.nowicki/semaphore-ansible main
+SakuraOps(config)# repository add ansible https://git.amuz.wroc.pl/patryk.nowicki/semaphore-ansible main
 SakuraOps(config)# end
 SakuraOps# show repositories
 ```
 
-Then (after SSH provisioning below) synchronize manually:
+Then, once the host is allowlisted (and credentials are configured if private), synchronize manually:
 
 ```text
 SakuraOps# repository sync ansible
@@ -28,6 +28,35 @@ The panel offers **Synchronizuj** and **Pliki** buttons for the same operations.
 Both use the same authenticated backend functions and database.
 `show inventory` (without repo name) retains its older independent local-checkout
 behavior for now.
+
+## HTTPS — public and private repositories
+
+HTTPS synchronization uses the regular `https://host/owner/repo` URL stored in
+SakuraOps. The host must be explicitly allowed by its service administrator:
+
+```bash
+export SAKURAOPS_GIT_ALLOWED_HOSTS=git.amuz.wroc.pl
+```
+
+**Public HTTPS Git:** no credentials required.
+
+**Private HTTPS Git:** create a read-only Forgejo access token (repository read
+permission only), store it in a file readable exclusively by the SakuraOps
+service user, and set the file's path as a service environment variable.
+For a repo named `ansible`, the example is:
+
+```bash
+export SAKURAOPS_GIT_TOKEN_FILE_ANSIBLE=/secure/path/ansible-git-token
+export SAKURAOPS_GIT_HTTPS_USER=oauth2
+```
+
+Set mode 0600 on the token file, owner SakuraOps. The username may depend on
+the Git provider. The token is passed to Git via a short-lived child-process
+environment variable (not a URL, CLI command argument, or log message).
+Never paste a token into a `repository add` command or commit it to Git.
+
+HTTPS TLS certificates are verified by Git's normal CA trust; HTTP redirects are
+disabled. No insecure TLS option is provided.
 
 ## SSH provisioning (one-time administrator task)
 
@@ -62,8 +91,8 @@ configured key. No arbitrary shell commands, submodules or hooks run in SakuraOp
 ## Limits and next improvements
 
 - Manual synchronization only. No automatic pull, no write/push, no playbook run.
-- HTTPS Git URLs can still be stored as metadata; synchronization currently
-  requires `ssh://git@host/path` with a pinned key and known_hosts.
+- HTTPS URLs can synchronize without a token for public repos, or with a separately
+  provisioned token file for private repos. SSH continues to use pinned host keys.
 - Git objects are cached under ignored `data/git_mirrors/`. Entries are indexed
   by `refs/sakuraops/synced`; last commit and timestamp are in SQLite.
 - Synchronization allows one operation per repository, times out after 50 seconds
@@ -89,6 +118,7 @@ python -m pytest -q tests/test_repository_settings.py tests/test_ui_shell.py tes
 python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Without SSH configuration, `repository sync ansible` must fail safely with a
-message explaining why. With a trusted test Forgejo read-only key, it should
-fetch and list files without modifying the remote or running Ansible.
+Without a host allowlist, HTTPS and SSH synchronization must fail safely.
+Private HTTPS repositories require a separate token file; SSH repositories need
+an approved deploy key. Both should fetch and list files without modifying the
+remote or running Ansible.
