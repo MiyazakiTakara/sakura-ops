@@ -2,7 +2,7 @@
 import shlex
 
 VERSION = "0.2.0-dev"
-ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync")
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit")
 SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
@@ -22,6 +22,9 @@ COMMANDS = {
     "repository delete <name>": "Usuń repozytorium w trybie konfiguracji",
     "repository sync <name>": "Ręcznie pobierz dane repozytorium (SSH, tylko odczyt)",
     "show repository <name> inventory|playbooks": "Lista plików z cache Git",
+    "show repository <name> file <path>": "Pokaż zawartość pliku (do 64 KiB)",
+    "show repository <name> diff <path>": "Pokaż lokalne różnice Git",
+    "repository edit <name> <path>": "Edytuj lokalny plik inventory/playbook",
 }
 
 
@@ -70,6 +73,12 @@ def interpret(command: str, mode: str = "exec") -> dict:
 
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
+    if name == "repository" and mode == "exec" and len(args) == 4 and lowered[1] == "edit":
+        return result("", action="repository-edit", name=args[2], filename=args[3])
+    if name == "show" and len(args) == 5 and lowered[1] == "repository" and lowered[3] == "diff":
+        return result("", action="repository-diff", name=args[2], filename=args[4])
+    if name == "show" and len(args) == 5 and lowered[1] == "repository" and lowered[3] == "file":
+        return result("", action="repository-read", name=args[2], filename=args[4])
     if name == "repository" and mode == "exec" and len(args) == 3 and lowered[1] == "sync":
         return result("", action="repository-sync", name=args[2])
     if name == "show" and len(args) == 4 and lowered[1] == "repository" and lowered[3] in ("inventory", "playbooks"):

@@ -1,4 +1,5 @@
 import { commonPrefix } from "./completion.js";
+import { insertAt, backspaceAt, deleteAt, moveCursor } from "./line_editor.js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { basicSetup } from "codemirror";
@@ -16,6 +17,8 @@ document.getElementById("logout-csrf").value = csrf;
 let history = [];
 let historyIndex = 0;
 let line = "";
+let cursor = 0;
+let renderedCursor = 0;
 let prompt = "SakuraOps# ";
 let busy = false;
 let drag = null;
@@ -96,10 +99,25 @@ resizeObserver.observe(win);
 function writeOutput(value) {
   if (value) for (const row of String(value).split("\n")) terminal.writeln(row.replace(/[\x00-\x1f\x7f-\x9f]/g, ""));
 }
-function drawPrompt() { terminal.write("\x1b[32m" + prompt + "\x1b[0m" + line); }
+function drawPrompt() {
+  terminal.write("\x1b[32m" + prompt + "\x1b[0m" + line);
+  const remaining = Array.from(line).length - cursor;
+  if (remaining) terminal.write("\x1b[" + remaining + "D");
+  renderedCursor = cursor;
+}
 function replaceLine(value) {
   terminal.write("\r\x1b[2K");
   line = value;
+  cursor = Array.from(value).length;
+  drawPrompt();
+}
+function redrawInput() {
+  // Return to the prompt start, including when the input wraps to another row.
+  const columns = Math.max(1, terminal.cols);
+  const visualCursor = Array.from(prompt).length + renderedCursor;
+  const up = Math.floor(visualCursor / columns);
+  if (up) terminal.write("\x1b[" + up + "A");
+  terminal.write("\r\x1b[J");
   drawPrompt();
 }
 async function request(url, options = {}) {
@@ -114,6 +132,7 @@ async function runCommand() {
   const command = line.trim();
   terminal.write("\r\n");
   line = "";
+  cursor = 0;
   if (!command) { drawPrompt(); return; }
   history.push(command); historyIndex = history.length;
   busy = true;
@@ -135,6 +154,8 @@ async function runCommand() {
         writeOutput(file.content || "Plik nie istnieje albo jest pusty.");
       } else if (data.action === "edit") {
         await openEditor(data.filename);
+      } else if (data.action === "repository-edit") {
+        await openFilePage(data.name, data.filename);
       } else {
         writeOutput(data.output);
         if (/^(?:skr\\s+)?repository\\s+(?:add|delete|sync)\\b/i.test(command) && !repositoryView.hidden)
@@ -157,7 +178,7 @@ async function autocomplete() {
     const choices = data.matches;
     if (!choices.length) return;
     const shared = commonPrefix(choices);
-    if (shared.length > line.length) {
+    if (shared.length > line.length && cursor === Array.from(line).length) {
       replaceLine(shared + (choices.length === 1 && !shared.endsWith(" ") ? " " : ""));
       lastCompletionList = null;
     } else if (lastCompletionList !== line) {
@@ -176,30 +197,82 @@ terminal.onData(async data => {
   if (busy || editorOpen || win.hidden) return;
   if (data === "\r") { await runCommand(); return; }
   if (data === "\u007f" || data === "\b") {
-    if (line.length) { line = line.slice(0, -1); terminal.write("\b \b"); }
+    const result = backspaceAt(line, cursor);
+    line = result.line;
+    cursor = result.cursor;
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[3~") {
+    const result = deleteAt(line, cursor);
+    line = result.line;
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[D" || data === "\x1bOD") {
+    cursor = moveCursor(line, cursor, -1);
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[C" || data === "\x1bOC") {
+    cursor = moveCursor(line, cursor, 1);
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[H" || data === "\x1bOH" || data === "\x01") {
+    cursor = 0;
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[F" || data === "\x1bOF" || data === "\x05") {
+    cursor = Array.from(line).length;
+    redrawInput();
     return;
   }
   if (data === "\u000c") { terminal.clear(); drawPrompt(); return; }
-  if (data === "\u0003") { terminal.write("^C\r\n"); line = ""; drawPrompt(); return; }
-  if (data === "\t") { busy = true; await autocomplete(); busy = false; return; }
-  lastCompletionList = null;
-  if (data === "\x1b[A") { if (historyIndex > 0) replaceLine(history[--historyIndex]); return; }
-  if (data === "\x1b[B") { if (historyIndex < history.length) historyIndex++; replaceLine(history[historyIndex] || ""); return; }
-  if (data === "?") {
-    {
-      terminal.write("\r\n");
-      try {
-        const result = await request("/api/console/complete", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prefix: line }) });
-        writeOutput(result.matches.join("\n") || "Brak poleceń.");
-      } catch(error) { writeOutput(error.message); }
-      drawPrompt(); return;
-    }
+  if (data === "\u0003") {
+    terminal.write("^C\r\n");
+    line = "";
+    cursor = 0;
+    drawPrompt();
+    return;
   }
-  // Paste/input is never interpreted as ANSI or system commands.
+  if (data === "\t") {
+    if (cursor !== Array.from(line).length) return;
+    busy = true;
+    await autocomplete();
+    busy = false;
+    return;
+  }
+  lastCompletionList = null;
+  if (data === "\x1b[A") {
+    if (historyIndex > 0) replaceLine(history[--historyIndex]);
+    return;
+  }
+  if (data === "\x1b[B") {
+    if (historyIndex < history.length) historyIndex++;
+    replaceLine(history[historyIndex] || "");
+    return;
+  }
+  if (data === "?") {
+    terminal.write("\r\n");
+    try {
+      const result = await request("/api/console/complete", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: line }) });
+      writeOutput(result.matches.join("\n") || "Brak poleceń.");
+    } catch(error) { writeOutput(error.message); }
+    drawPrompt();
+    return;
+  }
+  // Reject control sequences and keep pasted input in the current cursor position.
   const clean = data.replace(/[\x00-\x1f\x7f-\x9f\x1b]/g, "").replace(/[\r\n]/g, "");
-  if (clean && line.length + clean.length <= 500) { line += clean; terminal.write(clean); }
+  if (clean && Array.from(line).length + Array.from(clean).length <= 500) {
+    const result = insertAt(line, cursor, clean);
+    line = result.line;
+    cursor = result.cursor;
+    redrawInput();
+  }
 });
 
 const editor = document.getElementById("editor-pane");
@@ -336,23 +409,51 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", updateRepositoriesWhenVisible);
 
+const navInventory = document.getElementById("nav-inventory");
+const navPlaybooks = document.getElementById("nav-playbooks");
+const filesView = document.getElementById("files-view");
+let filesKind = "inventory";
+
 function setView(view) {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany w pliku Git?")) return false;
   const showRepo = view === "repositories";
-  dashboardView.hidden = showRepo;
+  const showFiles = view === "inventory" || view === "playbooks";
+  dashboardView.hidden = showRepo || showFiles;
   repositoryView.hidden = !showRepo;
+  filesView.hidden = !showFiles;
+  const menu = [
+    [navDashboard, view === "dashboard"],
+    [navRepositories, showRepo],
+    [navInventory, view === "inventory"],
+    [navPlaybooks, view === "playbooks"],
+  ];
+  for (const [item, selected] of menu) {
+    if (selected) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  }
   if (showRepo) {
-    navRepositories.setAttribute("aria-current", "page");
-    navDashboard.removeAttribute("aria-current");
     void refreshRepositories();
     if (document.visibilityState === "visible") connectRepositoryEvents();
   } else {
     disconnectRepositoryEvents();
-    navDashboard.setAttribute("aria-current", "page");
-    navRepositories.removeAttribute("aria-current");
   }
+  if (showFiles) {
+    filesKind = view;
+    document.getElementById("files-heading").textContent = view === "inventory" ? "Inventory" : "Playbooki";
+    gitFileEditor?.destroy();
+    gitFileEditor = null;
+    gitFilePath = null;
+    document.getElementById("git-file-editor").replaceChildren();
+    document.getElementById("git-file-save").disabled = true;
+    void refreshFileRepositories();
+  }
+  return true;
 }
 navDashboard.addEventListener("click", () => setView("dashboard"));
 navRepositories.addEventListener("click", () => setView("repositories"));
+navInventory.addEventListener("click", () => setView("inventory"));
+navPlaybooks.addEventListener("click", () => setView("playbooks"));
 
 function repoText(tag, text, className = "") {
   const element = document.createElement(tag);
@@ -482,6 +583,200 @@ repoForm.addEventListener("submit", async event => {
     submit.disabled = false;
   }
 });
+const fileRepoSelect = document.getElementById("files-repository");
+const gitFilesList = document.getElementById("git-files-list");
+const gitFileMount = document.getElementById("git-file-editor");
+const gitFileSave = document.getElementById("git-file-save");
+const gitFileDiff = document.getElementById("git-file-diff");
+const gitFileDiffOutput = document.getElementById("git-file-diff-output");
+const gitFileStatus = document.getElementById("git-file-status");
+let gitFileEditor = null;
+let gitFilePath = null;
+let gitFileRepository = null;
+let gitSavedValue = "";
+let gitFileRevision = "";
+
+function resetGitFileEditor() {
+  gitFileEditor?.destroy();
+  gitFileEditor = null;
+  gitFilePath = null;
+  gitFileRepository = null;
+  gitSavedValue = "";
+  gitFileRevision = "";
+  gitFileMount.replaceChildren();
+  gitFileSave.disabled = true;
+  gitFileDiff.disabled = true;
+  gitFileDiffOutput.hidden = true;
+  gitFileDiffOutput.textContent = "";
+  document.getElementById("git-file-title").textContent = "Wybierz plik";
+  document.getElementById("git-file-dirty").textContent = "";
+}
+
+async function refreshFileRepositories(selectedName = null) {
+  try {
+    const payload = await request("/api/repositories");
+    const current = selectedName || fileRepoSelect.value;
+    fileRepoSelect.replaceChildren();
+    for (const repo of payload.repositories) {
+      const option = document.createElement("option");
+      option.value = repo.name;
+      option.textContent = repo.name + " · " + repo.branch;
+      fileRepoSelect.append(option);
+    }
+    if (payload.repositories.some(repo => repo.name === current)) fileRepoSelect.value = current;
+    resetGitFileEditor();
+    await refreshGitFiles();
+  } catch (error) {
+    gitFileStatus.textContent = error.message || "Nie udało się odczytać repozytoriów.";
+  }
+}
+
+async function refreshGitFiles() {
+  const name = fileRepoSelect.value;
+  resetGitFileEditor();
+  gitFilesList.replaceChildren();
+  if (!name) {
+    gitFilesList.append(repoText("p", "Brak skonfigurowanych repozytoriów.", "repo-note"));
+    return;
+  }
+  try {
+    const payload = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/files?kind=" + filesKind);
+    if (!payload.files.length) {
+      gitFilesList.append(repoText("p", "Brak plików tej kategorii.", "repo-note"));
+      return;
+    }
+    for (const file of payload.files) {
+      const button = repoText("button", file);
+      button.type = "button";
+      button.addEventListener("click", () => { void loadGitFile(name, file); });
+      gitFilesList.append(button);
+    }
+    gitFileStatus.textContent = "Wybierz plik. Edycja wyłącznie lokalna, bez commit/push.";
+  } catch (error) {
+    gitFilesList.append(repoText("p", error.message || "Odczyt plików nie powiódł się.", "repo-note"));
+  }
+}
+
+async function loadGitFile(name, path) {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany w pliku Git?")) return;
+  try {
+    const data = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/content?path=" + encodeURIComponent(path));
+    resetGitFileEditor();
+    gitFilePath = path;
+    gitFileRepository = name;
+    gitSavedValue = data.content;
+    gitFileRevision = data.revision;
+    gitFileDiff.disabled = false;
+    document.getElementById("git-file-title").textContent = path;
+    for (const button of gitFilesList.querySelectorAll("button")) {
+      if (button.textContent === path) button.setAttribute("aria-current", "true");
+      else button.removeAttribute("aria-current");
+    }
+    gitFileEditor = new EditorView({
+      state: EditorState.create({
+        doc: data.content,
+        extensions: [
+          basicSetup, editorMode(path), syntaxHighlighting(defaultHighlightStyle),
+          editorTheme,
+          EditorView.updateListener.of(update => {
+            if (update.docChanged) {
+              const dirty = update.state.doc.toString() !== gitSavedValue;
+              gitFileSave.disabled = !dirty;
+              document.getElementById("git-file-dirty").textContent = dirty ? "Niezapisane zmiany" : "";
+            }
+          }),
+          keymap.of([{ key: "Mod-s", run: () => { void saveGitFile(); return true; } }]),
+        ],
+      }),
+      parent: gitFileMount,
+    });
+    gitFileStatus.textContent = "Plik lokalny · Ctrl+S zapis · bez commit/push";
+  } catch (error) {
+    gitFileStatus.textContent = error.message || "Nie udało się otworzyć pliku.";
+  }
+}
+
+async function saveGitFile() {
+  if (!gitFileEditor || !gitFilePath) return;
+  const content = gitFileEditor.state.doc.toString();
+  gitFileSave.disabled = true;
+  try {
+    const name = gitFileRepository;
+    const saved = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/content?path=" + encodeURIComponent(gitFilePath), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, revision: gitFileRevision }),
+    });
+    gitSavedValue = saved.content;
+    gitFileRevision = saved.revision;
+    const dirty = gitFileEditor?.state.doc.toString() !== gitSavedValue;
+    gitFileSave.disabled = !dirty;
+    document.getElementById("git-file-dirty").textContent = dirty ? "Niezapisane zmiany" : "";
+    gitFileStatus.textContent = dirty
+      ? "Zapisano poprzednią wersję. W edytorze są kolejne niezapisane zmiany."
+      : "Zapisano lokalnie. Zmiany nie zostały wysłane do Git.";
+    if (!gitFileDiffOutput.hidden) void refreshGitDiff();
+  } catch (error) {
+    gitFileSave.disabled = false;
+    gitFileStatus.textContent = error.message || "Zapis nie powiódł się.";
+  }
+}
+
+async function openFilePage(name, path) {
+  const kind = path.startsWith("inventory/") || path.startsWith("inventories/") ? "inventory" :
+    path.startsWith("playbooks/") || path.startsWith("playbook/") ? "playbooks" : null;
+  if (!kind) {
+    writeOutput("Obsługiwane są wyłącznie pliki inventory i playbooków.");
+    return;
+  }
+  if (setView(kind)) {
+    await refreshFileRepositories(name);
+    await loadGitFile(name, path);
+  }
+}
+
+async function refreshGitDiff() {
+  if (!gitFilePath || !gitFileRepository) return;
+  gitFileDiff.disabled = true;
+  try {
+    const payload = await request("/api/repositories/" + encodeURIComponent(gitFileRepository)
+      + "/diff?path=" + encodeURIComponent(gitFilePath));
+    gitFileDiffOutput.textContent = payload.diff || "Brak zmian względem ostatniego commita.";
+    gitFileDiffOutput.hidden = false;
+  } catch (error) {
+    gitFileStatus.textContent = error.message || "Nie udało się odczytać różnic.";
+  } finally {
+    gitFileDiff.disabled = false;
+  }
+}
+
+gitFileDiff.addEventListener("click", () => {
+  if (!gitFileDiffOutput.hidden) {
+    gitFileDiffOutput.hidden = true;
+    return;
+  }
+  void refreshGitDiff();
+});
+
+fileRepoSelect.addEventListener("change", () => {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany?")) {
+    fileRepoSelect.value = gitFileRepository;
+    return;
+  }
+  void refreshGitFiles();
+});
+document.getElementById("files-refresh").addEventListener("click", () => {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany?")) return;
+  void refreshGitFiles();
+});
+gitFileSave.addEventListener("click", () => { void saveGitFile(); });
+
 fetch("/api/me", {credentials:"same-origin"}).then(r => r.ok ? r.json() : null)
   .then(data => { if(data?.username) document.getElementById("username").textContent = data.username; }).catch(()=>{});
 if (new URLSearchParams(location.search).get("terminal") === "1") {
