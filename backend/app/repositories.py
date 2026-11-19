@@ -14,6 +14,8 @@ from sqlalchemy.exc import IntegrityError
 from .database import SessionLocal, engine
 from .models import GitRepository, GitSyncState
 
+GitSyncState.__table__.create(bind=engine, checkfirst=True)
+
 GitRepository.__table__.create(bind=engine, checkfirst=True)
 
 NAME_PATTERN = re.compile(r"[a-z][a-z0-9_-]{1,39}\Z")
