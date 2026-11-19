@@ -224,7 +224,7 @@ def console_execute(request: Request, body: ConsoleCommand):
                                            if status["modified_files"] else "Brak plików do commita."))
         elif action == "repository-commit":
             entry = commit_selected(result["name"], result["files"],
-                                    result["message"], result["expected_head"])
+                                    result["commit_message"], result["expected_head"])
             result["output"] = "Commit lokalny: " + entry["commit_sha"] + " (bez push)"
         elif action == "repository-push":
             pushed = push_explicit(result["name"], result["expected_head"])
@@ -245,7 +245,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         else:
             delete_repository(result["name"])
             result["output"] = f"Usunięto konfigurację {result['name']}."
-        for field in ("action", "name", "url", "branch", "kind", "filename", "files", "message", "expected_head"):
+        for field in ("action", "name", "url", "branch", "kind", "filename", "files", "commit_message", "expected_head"):
             result.pop(field, None)
     return result
 
