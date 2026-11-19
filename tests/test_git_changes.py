@@ -1,4 +1,5 @@
 """End-to-end Git change management on real local repositories (no network)."""
+import os
 import subprocess
 
 import pytest
@@ -48,6 +49,23 @@ def working_repo(monkeypatch, tmp_path):
     with session() as db:
         db.add(GitRepository(name="ansible", url=str(bare), branch="main"))
         db.commit()
+    original_git = git_sync._git
+
+    def git_with_test_file_push(args, timeout=90):
+        if "push" in args:
+            # Local file transport is enabled only in this test adapter.
+            env = dict(os.environ)
+            env["GIT_ALLOW_PROTOCOL"] = "file:https:ssh"
+            outcome = subprocess.run(
+                ["git", "-c", "core.hooksPath=/dev/null", *args],
+                env=env, capture_output=True, text=True, timeout=timeout,
+            )
+            if outcome.returncode:
+                raise HTTPException(502, "Test push rejected")
+            return outcome.stdout.strip()
+        return original_git(args, timeout)
+
+    monkeypatch.setattr(git_sync, "_git", git_with_test_file_push)
     yield root, bare
     engine.dispose()
 
@@ -118,7 +136,7 @@ def test_console_git_actions():
     commit = interpret('repository commit ansible ' + "a" * 40
                        + ' "Update hosts" inventory/hosts.ini')
     assert commit["action"] == "repository-commit"
-    assert commit["message"] == "Update hosts"
+    assert commit["commit_message"] == "Update hosts"
     assert commit["files"] == ["inventory/hosts.ini"]
     assert interpret("repository push ansible " + "a" * 40)["action"] == "repository-push"
     assert "Nieznane polecenie" in interpret("repository push ansible")["output"]
