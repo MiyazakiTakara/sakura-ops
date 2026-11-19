@@ -294,6 +294,18 @@ const repoForm = document.getElementById("repo-form");
 const repoList = document.getElementById("repo-list");
 const repoStatus = document.getElementById("repo-status");
 let repoLoading = false;
+let repoRefreshQueued = false;
+let repoSnapshot = null;
+const REPOSITORY_REFRESH_MS = 5000;
+
+function updateRepositoriesWhenVisible() {
+  if (!repositoryView.hidden && document.visibilityState === "visible") {
+    void refreshRepositories();
+  }
+}
+window.setInterval(updateRepositoriesWhenVisible, REPOSITORY_REFRESH_MS);
+document.addEventListener("visibilitychange", updateRepositoriesWhenVisible);
+window.addEventListener("focus", updateRepositoriesWhenVisible);
 
 function setView(view) {
   const showRepo = view === "repositories";
@@ -318,10 +330,16 @@ function repoText(tag, text, className = "") {
   return element;
 }
 async function refreshRepositories() {
-  if (repoLoading) return;
+  if (repoLoading) {
+    repoRefreshQueued = true;
+    return;
+  }
   repoLoading = true;
   try {
     const payload = await request("/api/repositories");
+    const snapshot = JSON.stringify(payload.repositories);
+    if (snapshot === repoSnapshot) return;
+    repoSnapshot = snapshot;
     repoList.replaceChildren();
     if (!payload.repositories.length) {
       repoList.append(repoText("p", "Nie dodano jeszcze repozytoriów.", "repo-note"));
@@ -354,9 +372,14 @@ async function refreshRepositories() {
       repoList.append(item);
     }
   } catch (error) {
+    repoSnapshot = null;
     repoList.replaceChildren(repoText("p", error.message || "Nie udało się odczytać repozytoriów.", "repo-note"));
   } finally {
     repoLoading = false;
+    if (repoRefreshQueued) {
+      repoRefreshQueued = false;
+      void refreshRepositories();
+    }
   }
 }
 repoForm.addEventListener("submit", async event => {
