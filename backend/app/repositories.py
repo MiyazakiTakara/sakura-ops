@@ -26,11 +26,18 @@ def validate(name: str, url: str, branch: str) -> tuple[str, str, str]:
         raise HTTPException(422, "Nieprawidłowa nazwa gałęzi")
     if len(url) > 500 or any(ord(c) < 33 or ord(c) > 126 for c in url):
         raise HTTPException(422, "Nieprawidłowy adres repozytorium")
-    parsed = urlsplit(url)
-    if (parsed.scheme not in ("https", "ssh") or not parsed.hostname or parsed.password or
-        parsed.username and parsed.scheme == "https" or parsed.query or parsed.fragment or
-        parsed.port not in (None, 22, 443, 80, 2222)):
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(422, "Nieprawidłowy adres repozytorium") from exc
+    if (parsed.scheme not in ("https", "ssh") or not host or
+        parsed.password is not None or parsed.query or parsed.fragment or
+        port not in (None, 22, 443, 80, 2222)):
         raise HTTPException(422, "Podaj adres HTTPS lub SSH bez hasła, tokenu i parametrów")
+    if parsed.scheme == "https" and parsed.username:
+        raise HTTPException(422, "Dane uwierzytelniania nie mogą być częścią adresu HTTPS")
     if parsed.scheme == "ssh" and parsed.username not in (None, "git"):
         raise HTTPException(422, "Adres SSH może używać wyłącznie użytkownika git")
     if not parsed.path or parsed.path == "/":
