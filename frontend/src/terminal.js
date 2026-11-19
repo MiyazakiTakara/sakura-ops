@@ -592,6 +592,7 @@ const changesCommit = document.getElementById("changes-commit");
 const changesPush = document.getElementById("changes-push");
 const changesStatus = document.getElementById("changes-status");
 let changesHead = null;
+let changesCanPush = false;
 
 function changeUrl(path) {
   return "/api/repositories/" + encodeURIComponent(changesRepoSelect.value) + path;
@@ -623,6 +624,7 @@ async function loadChangeRepositories() {
 }
 async function refreshGitChanges() {
   changesHead = null;
+  changesCanPush = false;
   changesCommit.disabled = true;
   changesPush.disabled = true;
   changesFiles.replaceChildren();
@@ -635,7 +637,11 @@ async function refreshGitChanges() {
     const state = await request(changeUrl("/git-status"));
     if (repo !== changesRepoSelect.value) return;
     changesHead = state.head;
-    changesSummary.textContent = "Gałąź: " + state.branch + " · HEAD: " + state.head;
+    const tracking = state.ahead === null
+      ? " · Brak lokalnego origin/" + state.branch
+      : " · Do wysłania: " + state.ahead + " · Za origin: " + state.behind;
+    changesSummary.textContent = "Gałąź: " + state.branch + " · HEAD: " + state.head + tracking;
+    changesCanPush = state.can_push === true;
     for (const file of state.modified_files) {
       const label = document.createElement("label");
       const checkbox = document.createElement("input");
@@ -651,9 +657,11 @@ async function refreshGitChanges() {
     if (state.other_changes) {
       changesFiles.append(repoText("p", "Uwaga: repozytorium zawiera także inne zmiany Git.", "repo-note"));
     }
-    changesPush.disabled = false;
+    changesPush.disabled = !changesCanPush;
     updateCommitButton();
-    changesStatus.textContent = "Wybierz pliki do lokalnego commita lub osobno wykonaj push.";
+    changesStatus.textContent = changesCanPush
+      ? "Masz " + state.ahead + " lokalnych commitów do wysłania. Push wymaga potwierdzenia."
+      : "Brak commitów do wysłania według lokalnego origin. Stan zdalny może wymagać odświeżenia.";
   } catch (error) {
     changesSummary.textContent = "Nie udało się sprawdzić stanu Git.";
     changesStatus.textContent = error.message || "Błąd odczytu statusu.";
@@ -689,7 +697,7 @@ changesCommit.addEventListener("click", async () => {
 changesPush.addEventListener("click", async () => {
   const name = changesRepoSelect.value;
   const head = changesHead;
-  if (!head || !name) return;
+  if (!head || !name || !changesCanPush) return;
   if (!confirm("Wysłać do origin commit " + head.slice(0, 12) + " repozytorium " + name +
                "?\nTo operacja zdalna. Nie używa --force.")) return;
   changesPush.disabled = true;
