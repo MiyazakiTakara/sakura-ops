@@ -168,6 +168,7 @@ from .repositories import list_repositories, add_repository, delete_repository, 
 from .git_sync import synchronize, list_cached_files, read_repository_file, write_repository_file, diff_repository_file
 from .git_changes import git_status, commit_selected, push_explicit
 from .inventory_preview import preview_inventory
+from .task_plans import task_plan
 
 
 class ConsoleCommand(BaseModel):
@@ -203,10 +204,18 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
-    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff", "repository-status", "repository-commit", "repository-push", "inventory-preview"):
+    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff", "repository-status", "repository-commit", "repository-push", "inventory-preview", "task-plan"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
-        if action == "inventory-preview":
+        if action == "task-plan":
+            plan = task_plan(result["name"], result["inventory"], result["playbook"], result["group"])
+            result["output"] = ("PLAN (bez wykonania)\nRepo: " + plan["repository"]
+                                + "\nInventory: " + plan["inventory"]
+                                + "\nPlaybook: " + plan["playbook"]
+                                + "\nGrupa: " + plan["limit"]
+                                + "\nHosty (" + str(plan["host_count"]) + "): "
+                                + ", ".join(plan["hosts"]))
+        elif action == "inventory-preview":
             preview = preview_inventory(result["name"], result["filename"])
             if result["kind"] == "hosts":
                 result["output"] = "\n".join(preview["hosts"]) or "Brak hostów."
@@ -394,6 +403,19 @@ def repository_push(request: Request, name: str, body: GitPushRequest):
 def repository_inventory_preview(request: Request, name: str, path: str):
     require_console_session(request, edit=True)
     return preview_inventory(name, path)
+
+
+class TaskPlanRequest(BaseModel):
+    repository: str = Field(min_length=2, max_length=40)
+    inventory: str = Field(min_length=1, max_length=500)
+    playbook: str = Field(min_length=1, max_length=500)
+    group: str = Field(min_length=1, max_length=255)
+
+
+@app.post("/api/tasks/plan")
+def preview_task_plan(request: Request, body: TaskPlanRequest):
+    require_console_session(request, edit=True)
+    return task_plan(body.repository, body.inventory, body.playbook, body.group)
 
 
 @app.delete("/api/repositories/{name}")
