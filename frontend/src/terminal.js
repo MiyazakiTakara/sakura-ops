@@ -409,6 +409,8 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", updateRepositoriesWhenVisible);
 
+const navTasks = document.getElementById("nav-tasks");
+const tasksView = document.getElementById("tasks-view");
 const navServers = document.getElementById("nav-servers");
 const serversView = document.getElementById("servers-view");
 const navInventory = document.getElementById("nav-inventory");
@@ -421,14 +423,17 @@ function setView(view) {
       !confirm("Odrzucić niezapisane zmiany w pliku Git?")) return false;
   const showRepo = view === "repositories";
   const showServers = view === "servers";
+  const showTasks = view === "tasks";
   const showFiles = view === "inventory" || view === "playbooks";
-  dashboardView.hidden = showRepo || showFiles || showServers;
+  dashboardView.hidden = showRepo || showFiles || showServers || showTasks;
+  tasksView.hidden = !showTasks;
   serversView.hidden = !showServers;
   repositoryView.hidden = !showRepo;
   filesView.hidden = !showFiles;
   const menu = [
     [navDashboard, view === "dashboard"],
     [navServers, showServers],
+    [navTasks, showTasks],
     [navRepositories, showRepo],
     [navInventory, view === "inventory"],
     [navPlaybooks, view === "playbooks"],
@@ -438,6 +443,7 @@ function setView(view) {
     else item.removeAttribute("aria-current");
   }
   if (showServers) void loadServerRepositories();
+  if (showTasks) void loadTaskRepositories();
   if (showRepo) {
     void refreshRepositories();
     void loadChangeRepositories();
@@ -459,6 +465,7 @@ function setView(view) {
 }
 navDashboard.addEventListener("click", () => setView("dashboard"));
 navServers.addEventListener("click", () => setView("servers"));
+navTasks.addEventListener("click", () => setView("tasks"));
 navRepositories.addEventListener("click", () => setView("repositories"));
 navInventory.addEventListener("click", () => setView("inventory"));
 navPlaybooks.addEventListener("click", () => setView("playbooks"));
@@ -812,6 +819,122 @@ async function readServerInventory(requestId = ++serverReadRequest) {
 serverRepo.addEventListener("change", () => { void loadServerInventories(); });
 serverFile.addEventListener("change", () => { void readServerInventory(); });
 document.getElementById("servers-refresh").addEventListener("click", () => { void loadServerInventories(); });
+
+const taskRepo = document.getElementById("task-repository");
+const taskInventory = document.getElementById("task-inventory");
+const taskPlaybook = document.getElementById("task-playbook");
+const taskGroup = document.getElementById("task-group");
+const taskPreviewButton = document.getElementById("task-preview");
+const taskStatus = document.getElementById("task-plan-status");
+const taskOutput = document.getElementById("task-plan-output");
+let taskRequestId = 0;
+
+function clearTaskPreview() {
+  taskOutput.hidden = true;
+  taskPreviewButton.disabled = !taskRepo.value || !taskInventory.value
+    || !taskPlaybook.value || !taskGroup.value;
+}
+function setTaskOptions(select, options) {
+  select.replaceChildren();
+  for (const path of options) {
+    const option = document.createElement("option");
+    option.value = path;
+    option.textContent = path;
+    select.append(option);
+  }
+}
+async function loadTaskRepositories() {
+  const id = ++taskRequestId;
+  taskStatus.textContent = "Odczytywanie repozytoriów...";
+  clearTaskPreview();
+  try {
+    const data = await request("/api/repositories");
+    if (id !== taskRequestId) return;
+    setTaskOptions(taskRepo, data.repositories.map(repo => repo.name));
+    await loadTaskFiles(id);
+  } catch (error) {
+    if (id === taskRequestId) taskStatus.textContent = error.message || "Błąd repozytoriów.";
+  }
+}
+async function loadTaskFiles(id = ++taskRequestId) {
+  setTaskOptions(taskInventory, []);
+  setTaskOptions(taskPlaybook, []);
+  setTaskOptions(taskGroup, []);
+  clearTaskPreview();
+  if (!taskRepo.value) {
+    taskStatus.textContent = "Dodaj i zsynchronizuj repozytorium Git.";
+    return;
+  }
+  const name = taskRepo.value;
+  try {
+    const root = "/api/repositories/" + encodeURIComponent(name);
+    const [inv, playbooks] = await Promise.all([
+      request(root + "/files?kind=inventory"),
+      request(root + "/files?kind=playbooks"),
+    ]);
+    if (id !== taskRequestId || taskRepo.value !== name) return;
+    setTaskOptions(taskInventory, inv.files);
+    setTaskOptions(taskPlaybook, playbooks.files);
+    await loadTaskGroups(id);
+  } catch (error) {
+    if (id === taskRequestId) taskStatus.textContent = error.message || "Nie można odczytać plików Git.";
+  }
+}
+async function loadTaskGroups(id = ++taskRequestId) {
+  setTaskOptions(taskGroup, []);
+  clearTaskPreview();
+  if (!taskInventory.value) {
+    taskStatus.textContent = "Nie znaleziono pliku inventory.";
+    return;
+  }
+  const name = taskRepo.value;
+  const path = taskInventory.value;
+  try {
+    const data = await request("/api/repositories/" + encodeURIComponent(name)
+      + "/inventory-preview?path=" + encodeURIComponent(path));
+    if (id !== taskRequestId || name !== taskRepo.value || path !== taskInventory.value) return;
+    setTaskOptions(taskGroup, data.groups.filter(x => x.host_count > 0).map(x => x.name));
+    clearTaskPreview();
+    taskStatus.textContent = taskGroup.value
+      ? "Wybierz grupę i kliknij Pokaż plan. Wykonanie jest wyłączone."
+      : "Brak niepustych grup do zaplanowania zadania.";
+  } catch (error) {
+    if (id === taskRequestId) taskStatus.textContent = error.message || "Błąd analizy inventory.";
+  }
+}
+taskRepo.addEventListener("change", () => { void loadTaskFiles(); });
+taskInventory.addEventListener("change", () => { void loadTaskGroups(); });
+taskPlaybook.addEventListener("change", clearTaskPreview);
+taskGroup.addEventListener("change", clearTaskPreview);
+taskPreviewButton.addEventListener("click", async () => {
+  const id = ++taskRequestId;
+  taskPreviewButton.disabled = true;
+  taskOutput.hidden = true;
+  taskStatus.textContent = "Sprawdzanie planu zadania...";
+  const body = {
+    repository: taskRepo.value, inventory: taskInventory.value,
+    playbook: taskPlaybook.value, group: taskGroup.value,
+  };
+  try {
+    const result = await request("/api/tasks/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (id !== taskRequestId) return;
+    document.getElementById("task-plan-summary").textContent =
+      result.repository + " · " + result.inventory + " · " + result.playbook +
+      " · grupa " + result.limit + " · " + result.host_count + " hostów";
+    const hosts = document.getElementById("task-plan-hosts");
+    hosts.replaceChildren();
+    for (const hostname of result.hosts) hosts.append(repoText("span", hostname, "server-host"));
+    taskOutput.hidden = false;
+    taskStatus.textContent = result.warning;
+  } catch (error) {
+    if (id === taskRequestId) taskStatus.textContent = error.message || "Błąd planu.";
+  } finally {
+    if (id === taskRequestId) clearTaskPreview();
+  }
+});
 
 const fileRepoSelect = document.getElementById("files-repository");
 const gitFilesList = document.getElementById("git-files-list");
