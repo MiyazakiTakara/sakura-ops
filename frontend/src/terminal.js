@@ -1,4 +1,5 @@
 import { commonPrefix } from "./completion.js";
+import { insertAt, backspaceAt, deleteAt, moveCursor } from "./line_editor.js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { basicSetup } from "codemirror";
@@ -16,6 +17,7 @@ document.getElementById("logout-csrf").value = csrf;
 let history = [];
 let historyIndex = 0;
 let line = "";
+let cursor = 0;
 let prompt = "SakuraOps# ";
 let busy = false;
 let drag = null;
@@ -96,10 +98,24 @@ resizeObserver.observe(win);
 function writeOutput(value) {
   if (value) for (const row of String(value).split("\n")) terminal.writeln(row.replace(/[\x00-\x1f\x7f-\x9f]/g, ""));
 }
-function drawPrompt() { terminal.write("\x1b[32m" + prompt + "\x1b[0m" + line); }
+function drawPrompt() {
+  terminal.write("\x1b[32m" + prompt + "\x1b[0m" + line);
+  const remaining = Array.from(line).length - cursor;
+  if (remaining) terminal.write("\x1b[" + remaining + "D");
+}
 function replaceLine(value) {
   terminal.write("\r\x1b[2K");
   line = value;
+  cursor = Array.from(value).length;
+  drawPrompt();
+}
+function redrawInput() {
+  // Return to the prompt start, including when the input wraps to another row.
+  const columns = Math.max(1, terminal.cols);
+  const visualCursor = Array.from(prompt).length + cursor;
+  const up = Math.floor(visualCursor / columns);
+  if (up) terminal.write("\x1b[" + up + "A");
+  terminal.write("\r\x1b[J");
   drawPrompt();
 }
 async function request(url, options = {}) {
@@ -114,6 +130,7 @@ async function runCommand() {
   const command = line.trim();
   terminal.write("\r\n");
   line = "";
+  cursor = 0;
   if (!command) { drawPrompt(); return; }
   history.push(command); historyIndex = history.length;
   busy = true;
@@ -159,7 +176,7 @@ async function autocomplete() {
     const choices = data.matches;
     if (!choices.length) return;
     const shared = commonPrefix(choices);
-    if (shared.length > line.length) {
+    if (shared.length > line.length && cursor === Array.from(line).length) {
       replaceLine(shared + (choices.length === 1 && !shared.endsWith(" ") ? " " : ""));
       lastCompletionList = null;
     } else if (lastCompletionList !== line) {
@@ -178,30 +195,82 @@ terminal.onData(async data => {
   if (busy || editorOpen || win.hidden) return;
   if (data === "\r") { await runCommand(); return; }
   if (data === "\u007f" || data === "\b") {
-    if (line.length) { line = line.slice(0, -1); terminal.write("\b \b"); }
+    const result = backspaceAt(line, cursor);
+    line = result.line;
+    cursor = result.cursor;
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[3~") {
+    const result = deleteAt(line, cursor);
+    line = result.line;
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[D" || data === "\x1bOD") {
+    cursor = moveCursor(line, cursor, -1);
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[C" || data === "\x1bOC") {
+    cursor = moveCursor(line, cursor, 1);
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[H" || data === "\x1bOH" || data === "\x01") {
+    cursor = 0;
+    redrawInput();
+    return;
+  }
+  if (data === "\x1b[F" || data === "\x1bOF" || data === "\x05") {
+    cursor = Array.from(line).length;
+    redrawInput();
     return;
   }
   if (data === "\u000c") { terminal.clear(); drawPrompt(); return; }
-  if (data === "\u0003") { terminal.write("^C\r\n"); line = ""; drawPrompt(); return; }
-  if (data === "\t") { busy = true; await autocomplete(); busy = false; return; }
-  lastCompletionList = null;
-  if (data === "\x1b[A") { if (historyIndex > 0) replaceLine(history[--historyIndex]); return; }
-  if (data === "\x1b[B") { if (historyIndex < history.length) historyIndex++; replaceLine(history[historyIndex] || ""); return; }
-  if (data === "?") {
-    {
-      terminal.write("\r\n");
-      try {
-        const result = await request("/api/console/complete", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prefix: line }) });
-        writeOutput(result.matches.join("\n") || "Brak poleceń.");
-      } catch(error) { writeOutput(error.message); }
-      drawPrompt(); return;
-    }
+  if (data === "\u0003") {
+    terminal.write("^C\r\n");
+    line = "";
+    cursor = 0;
+    drawPrompt();
+    return;
   }
-  // Paste/input is never interpreted as ANSI or system commands.
+  if (data === "\t") {
+    if (cursor !== Array.from(line).length) return;
+    busy = true;
+    await autocomplete();
+    busy = false;
+    return;
+  }
+  lastCompletionList = null;
+  if (data === "\x1b[A") {
+    if (historyIndex > 0) replaceLine(history[--historyIndex]);
+    return;
+  }
+  if (data === "\x1b[B") {
+    if (historyIndex < history.length) historyIndex++;
+    replaceLine(history[historyIndex] || "");
+    return;
+  }
+  if (data === "?") {
+    terminal.write("\r\n");
+    try {
+      const result = await request("/api/console/complete", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: line }) });
+      writeOutput(result.matches.join("\n") || "Brak poleceń.");
+    } catch(error) { writeOutput(error.message); }
+    drawPrompt();
+    return;
+  }
+  // Reject control sequences and keep pasted input in the current cursor position.
   const clean = data.replace(/[\x00-\x1f\x7f-\x9f\x1b]/g, "").replace(/[\r\n]/g, "");
-  if (clean && line.length + clean.length <= 500) { line += clean; terminal.write(clean); }
+  if (clean && Array.from(line).length + Array.from(clean).length <= 500) {
+    const result = insertAt(line, cursor, clean);
+    line = result.line;
+    cursor = result.cursor;
+    redrawInput();
+  }
 });
 
 const editor = document.getElementById("editor-pane");
