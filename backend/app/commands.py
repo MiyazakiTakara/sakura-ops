@@ -3,8 +3,8 @@ import shlex
 
 VERSION = "0.2.0-dev"
 ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end")
-SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands")
-CONFIG = ("help", "show", "end", "exit", "server", "description")
+SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories")
+CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
 COMMANDS = {
@@ -17,6 +17,9 @@ COMMANDS = {
     "cat <plik>": "Odczyt pliku roboczego",
     "clear": "Wyczyść terminal",
     "exit": "Wyjście z bieżącego trybu",
+    "show repositories": "Lista repozytoriów Git (konfiguracja)",
+    "repository add <name> <url> [branch]": "Dodaj repozytorium w trybie konfiguracji",
+    "repository delete <name>": "Usuń repozytorium w trybie konfiguracji",
 }
 
 
@@ -66,13 +69,15 @@ def interpret(command: str, mode: str = "exec") -> dict:
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
     if name == "show" and len(args) == 1:
-        return result("Dostępne: version, status, servers, inventory, playbooks, commands")
+        return result("Dostępne: version, status, servers, inventory, playbooks, commands, repositories")
     if name == "show" and len(args) == 2:
         key = lowered[1]
         if key == "version":
             return result(f"SakuraOps {VERSION}")
         if key == "status":
             return result(f"SakuraOps: uruchomiony\nWersja: {VERSION}\nAnsible: niepodłączony\nKonsola: gotowa")
+        if key == "repositories":
+            return result("", action="repositories-list")
         if key == "commands":
             return result("\n".join(COMMANDS))
         if key == "servers":
@@ -83,6 +88,13 @@ def interpret(command: str, mode: str = "exec") -> dict:
         return interpret("show " + name, mode)
     if lowered == ["configure", "terminal"] and mode == "exec":
         return result("Tryb konfiguracji (bez zapisu zmian infrastruktury).", "config")
+    if name == "repository" and mode == "config":
+        if len(args) in (4, 5) and lowered[1] == "add":
+            return result("", action="repository-add", name=args[2],
+                          url=args[3], branch=args[4] if len(args) == 5 else "main")
+        if len(args) == 3 and lowered[1] == "delete":
+            return result("", action="repository-delete", name=args[2])
+        return result("Składnia: repository add <nazwa> <url> [gałąź] lub repository delete <nazwa>")
     if name == "server" and mode == "config" and len(args) == 2:
         return result(f"Wybrano serwer: {args[1]} (tryb demonstracyjny).", "config-server")
     if name == "description" and mode.startswith("config"):
