@@ -1,6 +1,4 @@
 import asyncio
-import hashlib
-import json
 import hmac
 import html
 import os
@@ -166,7 +164,7 @@ from pydantic import BaseModel, Field
 from .commands import interpret, complete
 from .workspace import list_files, read_text, write_text
 from .inventory import discover
-from .repositories import list_repositories, add_repository, delete_repository
+from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
 
 
 class ConsoleCommand(BaseModel):
@@ -293,13 +291,6 @@ def repositories_delete(request: Request, name: str):
     require_console_session(request, edit=True)
     delete_repository(name)
     return {"deleted": name}
-
-
-def repository_fingerprint() -> str:
-    """Detect repository changes across worker processes via the shared SQLite DB."""
-    rows = list_repositories()
-    serialized = json.dumps(rows, ensure_ascii=False, sort_keys=True)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 @app.get("/api/repositories/events")
