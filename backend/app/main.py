@@ -165,6 +165,7 @@ from .commands import interpret, complete
 from .workspace import list_files, read_text, write_text
 from .inventory import discover
 from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
+from .git_sync import synchronize, list_cached_files
 
 
 class ConsoleCommand(BaseModel):
@@ -200,7 +201,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
-    if action in ("repositories-list", "repository-add", "repository-delete"):
+    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
         if action == "repositories-list":
@@ -212,10 +213,16 @@ def console_execute(request: Request, body: ConsoleCommand):
         elif action == "repository-add":
             row = add_repository(result["name"], result["url"], result["branch"])
             result["output"] = f"Zapisano repozytorium {row['name']} (bez synchronizacji Git)."
+        elif action == "repository-sync":
+            state = synchronize(result["name"])
+            result["output"] = f"Synchronizacja zakończona: {state['commit_sha'][:12]}"
+        elif action == "repository-files":
+            paths = list_cached_files(result["name"], result["kind"])
+            result["output"] = "\\n".join(paths) if paths else "Brak pasujących plików."
         else:
             delete_repository(result["name"])
             result["output"] = f"Usunięto konfigurację {result['name']}."
-        for field in ("action", "name", "url", "branch"):
+        for field in ("action", "name", "url", "branch", "kind"):
             result.pop(field, None)
     return result
 
@@ -284,6 +291,18 @@ def repositories_get(request: Request):
 def repositories_post(request: Request, body: RepositoryInput):
     require_console_session(request, edit=True)
     return add_repository(body.name, body.url, body.branch)
+
+
+@app.post("/api/repositories/{name}/sync")
+def repository_sync(request: Request, name: str):
+    require_console_session(request, edit=True)
+    return synchronize(name)
+
+
+@app.get("/api/repositories/{name}/files")
+def repository_files(request: Request, name: str, kind: str = "inventory"):
+    require_console_session(request, edit=True)
+    return {"name": name, "kind": kind, "files": list_cached_files(name, kind)}
 
 
 @app.delete("/api/repositories/{name}")
