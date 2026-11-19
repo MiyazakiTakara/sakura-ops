@@ -27,6 +27,7 @@ GRAMMAR_EXEC = (
     ("configure", "terminal"),
     ("edit", "{workspace}"), ("nano", "{workspace}"), ("cat", "{workspace}"),
     ("files",), ("clear",), ("history",), ("exit",), ("end",), ("help",),
+    ("status",), ("version",),
 )
 GRAMMAR_CONFIG = (
     ("repository", "add", "{newname}", "{url}", "{branch}"),
@@ -98,7 +99,8 @@ def _candidate_suffix(
             return []
         chosen.append(value)
     values = _options(grammar[len(fixed)], chosen, repos)
-    return [v for v in values if v.lower().startswith(partial.lower())]
+    return [v for v in values if not any(ch.isspace() for ch in v)
+            and v.lower().startswith(partial.lower())]
 
 
 MANUAL_HINTS = {
@@ -136,9 +138,10 @@ def context_complete(prefix: str, mode: str = "exec") -> tuple[list[str], str | 
     partial = "" if trailing or not parts else parts[-1]
     if len(fixed) > 12:
         return [], None
-    grammar = GRAMMAR_CONFIG if mode == "config" else (
-        GRAMMAR_SERVER if mode == "config-server" else GRAMMAR_EXEC
-    )
+    grammar = (GRAMMAR_CONFIG + tuple(p for p in GRAMMAR_EXEC if p[0] == "show")
+               if mode == "config" else
+               GRAMMAR_SERVER + tuple(p for p in GRAMMAR_EXEC if p[0] == "show")
+               if mode == "config-server" else GRAMMAR_EXEC)
     repos = [entry["name"] for entry in list_repositories()]
     matched: list[str] = []
     for pattern in grammar:
