@@ -80,6 +80,7 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 #git-file-editor .cm-focused{outline:2px solid #D9A0B7;outline-offset:-2px}
 #git-file-status{margin-top:10px;min-height:22px;overflow-wrap:anywhere}
 @media(max-width:680px){.files-layout{grid-template-columns:1fr}.git-files-list{min-height:90px;max-height:190px}#git-file-editor{height:310px}}
+#git-file-diff-output{white-space:pre-wrap;overflow-wrap:anywhere;max-height:250px;overflow:auto;background:#121A21;color:#C6D1DA;border:1px solid #465360;border-radius:7px;padding:12px;font:12px/1.5 ui-monospace,monospace}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -126,9 +127,11 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
           <div class="files-toolbar">
             <strong id="git-file-title">Wybierz plik</strong>
             <span id="git-file-dirty" class="repo-note"></span>
+            <button type="button" class="repo-sync" id="git-file-diff" disabled>Pokaż różnice</button>
             <button type="button" class="repo-sync" id="git-file-save" disabled>Zapisz lokalnie</button>
           </div>
           <div id="git-file-editor" aria-label="Edytor pliku Git"></div>
+          <pre id="git-file-diff-output" hidden aria-label="Różnice Git"></pre>
           <div id="git-file-status" class="repo-note" role="status" aria-live="polite">Zmiany zostają lokalnie. Nie wykonujemy commit ani push.</div>
         </div>
       </div>
