@@ -33,12 +33,20 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 .termarea{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
 #output{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
 .entry{margin-bottom:9px}.entry.cmd{color:var(--term)}.entry.error{color:#F5B4B4}
-#command-form{display:flex;gap:9px;align-items:center;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
-#command-form label{white-space:nowrap;color:var(--term)}#command{width:100%;min-width:0;flex:1;border:0;background:transparent;color:var(--text);padding:4px 0}
+#xterm{height:100%;width:100%;min-height:0}
+#xterm .xterm{height:100%;padding:4px}
+.editor-pane[hidden]{display:none!important}
+.editor-pane{position:absolute;inset:42px 0 0;background:#101820;display:flex;flex-direction:column;padding:12px;gap:9px;z-index:3}
+.editor-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;flex-wrap:wrap}
+.editor-top button{border:1px solid #576370;border-radius:6px;background:#252B34;color:#E6E9EE;padding:7px 11px}
+.editor-pane textarea{flex:1;min-height:0;min-width:0;resize:none;padding:12px;background:#121A21;border:1px solid #465360;color:#E6E9EE;font:13px/1.6 ui-monospace,Consolas,monospace;tab-size:2}
+.editor-status{font-size:11px;color:#AEB8C5}
+#editor-open{border:1px solid #4D5968;background:#303741;color:#D1D6DD;border-radius:6px;padding:5px 8px;font-size:12px;margin-left:10px}
 #command:disabled{opacity:.5}.resize-note{position:absolute;bottom:3px;right:4px;color:#8995A2;font-size:10px;pointer-events:none}
 @media(max-width:850px){.layout{padding:17px;gap:14px}.nav{flex-basis:125px}.metrics{grid-template-columns:1fr 1fr}#window{left:18%;width:76%}}
 @media(max-width:600px){.topbar{padding:0 15px}.layout{padding:12px;gap:11px}.nav{flex:0 0 49px;border-radius:18px;padding:5px}.nav button{padding:11px 7px;justify-content:center}.nav button .navtext{display:none}.workspace h1{font-size:19px}.heading{display:block}.metrics{grid-template-columns:1fr}.metric{padding:13px}.metric .value{font-size:19px}.panel{padding:15px}#window,#window.max{left:6px!important;top:73px!important;width:calc(100vw - 12px)!important;height:calc(100dvh - 79px)!important;min-width:0;min-height:0;max-width:none;max-height:none;resize:none;border-radius:8px}}
 </style>
+<link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
 <body>
 <header class="topbar">
@@ -63,12 +71,12 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
       <div class="metric"><div class="label">Ansible</div><div class="value">Niepodłączony</div></div>
       <div class="metric"><div class="label">Tryb pracy</div><div class="value">Lokalny</div></div>
     </div>
-    <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Dostępne polecenia: help, status, version. Zarządzanie serwerami i automatyzacje pojawią się w kolejnych etapach.</p></section>
+    <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Wpisz ? lub help. Polecenie edit notatki.md otwiera edytor bezpiecznych plików roboczych. Zarządzanie serwerami i automatyzacje pojawią się później.</p></section>
   </main>
 </div>
 <section id="window" aria-label="Terminal SakuraOps" role="region" hidden>
   <div class="titlebar" id="titlebar" tabindex="0" aria-label="Pasek okna terminala. Alt i strzałki przesuwają, Alt Shift i strzałki zmieniają rozmiar.">
-    <div class="windowname"><span class="sym" aria-hidden="true">▣</span> SakuraOps Terminal</div>
+    <div class="windowname"><span class="sym" aria-hidden="true">▣</span> SakuraOps Terminal <button id="editor-open" type="button" title="Jak otworzyć edytor">Edytor</button></div>
     <div class="windowactions">
       <button id="minimize" type="button" title="Minimalizuj" aria-label="Minimalizuj">−</button>
       <button id="maximize" type="button" title="Maksymalizuj" aria-label="Maksymalizuj">□</button>
@@ -76,96 +84,21 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     </div>
   </div>
   <div class="termarea" id="scrollarea">
-    <div id="output" role="log" aria-live="polite" aria-relevant="additions"><div class="entry">SakuraOps 0.1.0-dev<br>Wpisz help, aby zobaczyć polecenia.</div></div>
-    <form id="command-form"><label for="command">skr &gt;</label><input id="command" maxlength="500" autocomplete="off" spellcheck="false" aria-label="Polecenie SakuraOps"></form>
+    <div id="xterm" aria-label="Konsola SakuraOps"></div>
+  </div>
+  <div id="editor-pane" class="editor-pane" hidden aria-label="Edytor plików roboczych">
+    <div class="editor-top">
+      <strong id="editor-filename">Plik</strong>
+      <div>
+        <button type="button" id="editor-save">Zapisz (Ctrl+S)</button>
+        <button type="button" id="editor-close">Wróć do terminala</button>
+      </div>
+    </div>
+    <textarea id="editor-content" spellcheck="false" aria-label="Treść pliku UTF-8"></textarea>
+    <div id="editor-status" class="editor-status" role="status"></div>
   </div>
   <span class="resize-note" aria-hidden="true">◢</span>
 </section>
-<script>
-"use strict";
-const win=document.getElementById("window");
-const titlebar=document.getElementById("titlebar");
-const input=document.getElementById("command");
-const output=document.getElementById("output");
-const scrollarea=document.getElementById("scrollarea");
-const csrf=document.querySelector('meta[name="sakuraops-csrf"]')?.content || "";
-document.getElementById("logout-csrf").value=csrf;
-const commandHistory=[];
-let historyIndex=0;
-let maximized=false;
-let busy=false;
-let drag=null;
-const narrow=()=>matchMedia("(max-width:600px)").matches;
-function openTerminal(){win.hidden=false;input.focus();}
-function hideTerminal(){win.hidden=true;document.getElementById("open-terminal").focus();}
-function print(message,type="result"){const el=document.createElement("div");el.className="entry "+type;el.textContent=message;output.appendChild(el);scrollarea.scrollTop=scrollarea.scrollHeight;}
-function bound(){
- if(narrow()||maximized)return;
- const width=win.offsetWidth,height=win.offsetHeight;
- win.style.left=Math.max(0,Math.min(innerWidth-90,win.offsetLeft))+"px";
- win.style.top=Math.max(70,Math.min(innerHeight-42,win.offsetTop))+"px";
- if(width>innerWidth)win.style.width=innerWidth+"px";
- if(height>innerHeight-70)win.style.height=Math.max(210,innerHeight-75)+"px";
-}
-document.getElementById("open-terminal").addEventListener("click",openTerminal);
-document.getElementById("minimize").addEventListener("click",hideTerminal);
-document.getElementById("close").addEventListener("click",hideTerminal);
-document.getElementById("maximize").addEventListener("click",()=>{
- maximized=!maximized;win.classList.toggle("max",maximized);
- const btn=document.getElementById("maximize");btn.textContent=maximized?"❐":"□";btn.title=maximized?"Przywróć":"Maksymalizuj";btn.setAttribute("aria-label",btn.title);
- if(!maximized)bound();input.focus();
-});
-titlebar.addEventListener("pointerdown",event=>{
- if(narrow()||maximized||event.button!==0||event.target.closest("button"))return;
- drag={x:event.clientX,y:event.clientY,left:win.offsetLeft,top:win.offsetTop};
- titlebar.setPointerCapture(event.pointerId);titlebar.classList.add("dragging");
-});
-titlebar.addEventListener("pointermove",event=>{
- if(!drag)return;
- win.style.left=Math.max(0,Math.min(innerWidth-90,drag.left+event.clientX-drag.x))+"px";
- win.style.top=Math.max(70,Math.min(innerHeight-42,drag.top+event.clientY-drag.y))+"px";
-});
-function endDrag(){drag=null;titlebar.classList.remove("dragging")}
-titlebar.addEventListener("pointerup",endDrag);titlebar.addEventListener("pointercancel",endDrag);
-titlebar.addEventListener("keydown",event=>{
- if(narrow()||maximized||!event.altKey)return;
- const amount=event.ctrlKey?1:12;let key=event.key;
- if(!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(key))return;
- event.preventDefault();
- let dx=key==="ArrowLeft"?-amount:key==="ArrowRight"?amount:0;
- let dy=key==="ArrowUp"?-amount:key==="ArrowDown"?amount:0;
- if(event.shiftKey){win.style.width=Math.max(330,win.offsetWidth+dx)+"px";win.style.height=Math.max(210,win.offsetHeight+dy)+"px";}
- else{win.style.left=(win.offsetLeft+dx)+"px";win.style.top=(win.offsetTop+dy)+"px";}
- bound();
-});
-window.addEventListener("resize",bound);
-document.getElementById("command-form").addEventListener("submit",async event=>{
- event.preventDefault();
- const command=input.value.trim();if(!command||busy)return;
- commandHistory.push(command);historyIndex=commandHistory.length;input.value="";
- if(command==="clear"||command==="skr clear"){output.replaceChildren();return;}
- print("skr > "+command,"cmd");
- busy=true;input.disabled=true;
- try{
-  const response=await fetch("/api/console",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},body:JSON.stringify({command})});
-  if(response.status===401){print("Sesja wygasła. Zaloguj się ponownie.","error");return;}
-  const body=await response.json();
-  print(response.ok?body.output:(typeof body.detail==="string"?body.detail:"Błąd wykonania"),response.ok?"result":"error");
- }catch{print("Brak połączenia z SakuraOps.","error");}
- finally{busy=false;input.disabled=false;input.focus();}
-});
-input.addEventListener("keydown",event=>{
- if(event.key==="ArrowUp"&&historyIndex>0){event.preventDefault();input.value=commandHistory[--historyIndex];}
- else if(event.key==="ArrowDown"){event.preventDefault();if(historyIndex<commandHistory.length)historyIndex++;input.value=commandHistory[historyIndex]||"";}
- else if(event.ctrlKey&&event.key.toLowerCase()==="l"){event.preventDefault();output.replaceChildren();}
-});
-document.addEventListener("keydown",event=>{
- if(event.key==="Escape"&&!win.hidden){hideTerminal();}
-});
-fetch("/api/me",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(data=>{
- if(data?.username)document.getElementById("username").textContent=data.username;
-}).catch(()=>{});
-if(new URLSearchParams(location.search).get("terminal")==="1"){openTerminal();history.replaceState(null,"","/");}
-</script>
+<script src="/static/generated/terminal.js" defer></script>
 </body>
 </html>
