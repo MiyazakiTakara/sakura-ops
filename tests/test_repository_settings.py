@@ -134,7 +134,7 @@ def test_normal_git_first_clone_then_fast_forward(repository_database, monkeypat
         if "branch" in args:
             return "main"
         if "ls-files" in args:
-            return "inventory/production.yml\\nplaybooks/update.yaml"
+            return "\n".join(["inventory/production.yml", "playbooks/update.yaml"])
         return ""
 
     monkeypatch.setattr(git_sync, "_git", fake_git)
