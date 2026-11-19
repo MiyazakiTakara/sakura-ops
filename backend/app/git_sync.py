@@ -3,6 +3,7 @@
 This module never checks out files, executes Ansible, or uses credentials
 provided in a command. It operates on bare Git repositories only.
 """
+import base64
 import fcntl
 import os
 import re
@@ -77,21 +78,34 @@ def _https_credentials(name: str) -> dict[str, str]:
     if not token or len(token) > 4096 or "\n" in token:
         raise HTTPException(409, "Nieprawidłowy token HTTPS")
     return {
-        "GIT_ASKPASS": str((Path(__file__).parent / "git_askpass.py").resolve()),
-        "SAKURAOPS_ASKPASS_USER": os.getenv("SAKURAOPS_GIT_HTTPS_USER", "oauth2"),
-        "SAKURAOPS_ASKPASS_TOKEN": token,
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.extraHeader",
+        "GIT_CONFIG_VALUE_0": "Authorization: Basic " + base64.b64encode(
+            (os.getenv("SAKURAOPS_GIT_HTTPS_USER", "oauth2") + ":" + token).encode()
+        ).decode(),
     }
 
 
-def _git(args: list[str], ssh: list[str] | None = None) -> str:
+def _git(args: list[str], ssh: list[str] | None = None,
+         credentials: dict[str, str] | None = None) -> str:
     env = dict(os.environ)
+    for key in list(env):
+        if key.startswith(("GIT_CONFIG_", "GIT_ASKPASS", "GIT_SSH", "SSH_ASKPASS")):
+            env.pop(key, None)
     env["GIT_CONFIG_NOSYSTEM"] = "1"
     env["GIT_CONFIG_GLOBAL"] = os.devnull
     env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ALLOW_PROTOCOL"] = "ssh"
+    env["GIT_ALLOW_PROTOCOL"] = "ssh:https"
     if ssh:
         env["GIT_SSH_COMMAND"] = shlex.join(ssh)
-    cmd = ["git", "-c", "core.hooksPath=/dev/null", *args]
+    if credentials:
+        env.update(credentials)
+    cmd = ["git", "-c", "core.hooksPath=/dev/null",
+           "-c", "credential.helper=",
+           "-c", "http.followRedirects=false",
+           "-c", "protocol.file.allow=never",
+           "-c", "protocol.ext.allow=never",
+           "-c", "fetch.recurseSubmodules=false", *args]
     process = subprocess.Popen(
         cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         text=True, start_new_session=True,
@@ -133,7 +147,9 @@ def synchronize(name: str) -> dict:
         if repo is None:
             raise HTTPException(404, "Nie znaleziono repozytorium")
         url, branch = repo.url, repo.branch
-    _, ssh = _settings(url)
+    scheme, _ = _allowed_host(url)
+    ssh = _settings(url)[1] if scheme == "ssh" else None
+    credentials = _https_credentials(name) if scheme == "https" else None
     mirror = _mirror(name)
     lock_path = MIRRORS / (name + ".lock")
     lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -151,7 +167,7 @@ def synchronize(name: str) -> dict:
             raise HTTPException(409, "Nieprawidłowy katalog repozytorium")
         # No shell expansion, no checkout, no submodules and no git hooks.
         _git(["-C", str(mirror), "fetch", "--no-tags", "--depth=1",
-              "--", url, branch], ssh)
+              "--", url, branch], ssh, credentials)
         commit_sha = _git(["-C", str(mirror), "rev-parse", "--verify", "FETCH_HEAD"])
         if not SHA.fullmatch(commit_sha):
             raise HTTPException(502, "Nieprawidłowy identyfikator Git")
