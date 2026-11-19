@@ -516,6 +516,8 @@ const fileRepoSelect = document.getElementById("files-repository");
 const gitFilesList = document.getElementById("git-files-list");
 const gitFileMount = document.getElementById("git-file-editor");
 const gitFileSave = document.getElementById("git-file-save");
+const gitFileDiff = document.getElementById("git-file-diff");
+const gitFileDiffOutput = document.getElementById("git-file-diff-output");
 const gitFileStatus = document.getElementById("git-file-status");
 let gitFileEditor = null;
 let gitFilePath = null;
@@ -532,6 +534,9 @@ function resetGitFileEditor() {
   gitFileRevision = "";
   gitFileMount.replaceChildren();
   gitFileSave.disabled = true;
+  gitFileDiff.disabled = true;
+  gitFileDiffOutput.hidden = true;
+  gitFileDiffOutput.textContent = "";
   document.getElementById("git-file-title").textContent = "Wybierz plik";
   document.getElementById("git-file-dirty").textContent = "";
 }
@@ -593,6 +598,7 @@ async function loadGitFile(name, path) {
     gitFileRepository = name;
     gitSavedValue = data.content;
     gitFileRevision = data.revision;
+    gitFileDiff.disabled = false;
     document.getElementById("git-file-title").textContent = path;
     for (const button of gitFilesList.querySelectorAll("button")) {
       if (button.textContent === path) button.setAttribute("aria-current", "true");
@@ -642,6 +648,7 @@ async function saveGitFile() {
     gitFileStatus.textContent = dirty
       ? "Zapisano poprzednią wersję. W edytorze są kolejne niezapisane zmiany."
       : "Zapisano lokalnie. Zmiany nie zostały wysłane do Git.";
+    if (!gitFileDiffOutput.hidden) void refreshGitDiff();
   } catch (error) {
     gitFileSave.disabled = false;
     gitFileStatus.textContent = error.message || "Zapis nie powiódł się.";
@@ -660,6 +667,29 @@ async function openFilePage(name, path) {
     await loadGitFile(name, path);
   }
 }
+
+async function refreshGitDiff() {
+  if (!gitFilePath || !gitFileRepository) return;
+  gitFileDiff.disabled = true;
+  try {
+    const payload = await request("/api/repositories/" + encodeURIComponent(gitFileRepository)
+      + "/diff?path=" + encodeURIComponent(gitFilePath));
+    gitFileDiffOutput.textContent = payload.diff || "Brak zmian względem ostatniego commita.";
+    gitFileDiffOutput.hidden = false;
+  } catch (error) {
+    gitFileStatus.textContent = error.message || "Nie udało się odczytać różnic.";
+  } finally {
+    gitFileDiff.disabled = false;
+  }
+}
+
+gitFileDiff.addEventListener("click", () => {
+  if (!gitFileDiffOutput.hidden) {
+    gitFileDiffOutput.hidden = true;
+    return;
+  }
+  void refreshGitDiff();
+});
 
 fileRepoSelect.addEventListener("change", () => {
   if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
