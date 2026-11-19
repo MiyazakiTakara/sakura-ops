@@ -47,6 +47,23 @@ Po zalogowaniu otwórz **Serwery**, wybierz `ansible` oraz
 Testy CI sprawdzają, że nie są ujawniane zmienne oraz że pliki niepoprawne
 i cykliczne są odrzucane.
 
+## Podgląd zadań (bez wykonania)
+
+Dostępny jest także widok **Zadania**. Wybierz repozytorium, inventory,
+śledzony playbook i grupę docelową. SakuraOps zweryfikuje wybraną grupę i
+pokaże statyczną listę hostów, które **mogłyby** zostać wybrane. Żadne
+połączenie z serwerami nie następuje i nie jest uruchamiany Ansible.
+
+Te same dane można uzyskać w konsoli:
+
+```text
+SakuraOps# task plan ansible inventory/hosts.ini playbooks/linux-inventory.yml all
+```
+
+Dostęp wymaga roli administratora. Plan nie jest zapisywany ani wykonywany;
+nie można przekazać dowolnych argumentów procesu. Nie jest to pełna ewaluacja
+`hosts:`, `when:` czy innych warunków playbooka.
+
 ## Następna faza: zadania
 
 Do bezpiecznego uruchamiania playbooków potrzebna będzie **oddzielna**
