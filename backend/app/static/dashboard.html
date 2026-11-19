@@ -39,7 +39,9 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 .editor-pane{position:absolute;inset:42px 0 0;background:#101820;display:flex;flex-direction:column;padding:12px;gap:9px;z-index:3}
 .editor-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;flex-wrap:wrap}
 .editor-top button{border:1px solid #576370;border-radius:6px;background:#252B34;color:#E6E9EE;padding:7px 11px}
-.editor-pane textarea{flex:1;min-height:0;min-width:0;resize:none;padding:12px;background:#121A21;border:1px solid #465360;color:#E6E9EE;font:13px/1.6 ui-monospace,Consolas,monospace;tab-size:2}
+.editor-pane #editor-content{flex:1;min-height:0;min-width:0;overflow:hidden;border:1px solid #465360;border-radius:5px}
+.editor-pane #editor-content .cm-editor{height:100%}
+.editor-pane #editor-content .cm-focused{outline:2px solid #D9A0B7;outline-offset:-2px}
 .editor-status{font-size:11px;color:#AEB8C5}
 #editor-open{border:1px solid #4D5968;background:#303741;color:#D1D6DD;border-radius:6px;padding:5px 8px;font-size:12px;margin-left:10px}
 #command:disabled{opacity:.5}.resize-note{position:absolute;bottom:3px;right:4px;color:#8995A2;font-size:10px;pointer-events:none}
@@ -94,7 +96,7 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
         <button type="button" id="editor-close">Wróć do terminala</button>
       </div>
     </div>
-    <textarea id="editor-content" spellcheck="false" aria-label="Treść pliku UTF-8"></textarea>
+    <div id="editor-content" aria-label="Edytor pliku UTF-8"></div>
     <div id="editor-status" class="editor-status" role="status"></div>
   </div>
   <span class="resize-note" aria-hidden="true">◢</span>

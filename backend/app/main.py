@@ -162,6 +162,7 @@ def me(request: Request):
 from pydantic import BaseModel, Field
 from .commands import interpret, complete
 from .workspace import list_files, read_text, write_text
+from .inventory import discover
 
 
 class ConsoleCommand(BaseModel):
@@ -190,6 +191,12 @@ def console_execute(request: Request, body: ConsoleCommand):
     mode = request.session.get("console_mode", "exec")
     result = interpret(body.command, mode)
     request.session["console_mode"] = result["mode"]
+    if result.get("action") == "repo-list":
+        if user["role"] != "admin":
+            raise HTTPException(403, "Inventory wymaga roli administratora")
+        heading, paths = discover(result["kind"])
+        result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
+        result.pop("action", None)
     return result
 
 class CompletionRequest(BaseModel):

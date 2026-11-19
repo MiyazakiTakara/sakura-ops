@@ -1,5 +1,11 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { basicSetup } from "codemirror";
+import { EditorState, Compartment } from "@codemirror/state";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view";
+import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { yaml } from "@codemirror/lang-yaml";
+import { markdown } from "@codemirror/lang-markdown";
 
 const win = document.getElementById("window");
 const titlebar = document.getElementById("titlebar");
@@ -179,47 +185,87 @@ terminal.onData(async data => {
 });
 
 const editor = document.getElementById("editor-pane");
-const editorText = document.getElementById("editor-content");
+const editorMount = document.getElementById("editor-content");
 const editorTitle = document.getElementById("editor-filename");
 const editorStatus = document.getElementById("editor-status");
 let editingName = null;
 let savedValue = "";
+let editorView = null;
+const editorTheme = EditorView.theme({
+  "&": { height: "100%", backgroundColor: "#121A21", color: "#E6E9EE", fontSize: "13px" },
+  ".cm-scroller": { fontFamily: "Consolas, monospace", lineHeight: "1.65" },
+  ".cm-gutters": { backgroundColor: "#202731", color: "#8F9CA9", border: "none" },
+  ".cm-activeLine": { backgroundColor: "#26303A" },
+  ".cm-activeLineGutter": { backgroundColor: "#303B46" },
+  ".cm-content": { caretColor: "#D9A0B7" },
+  ".cm-cursor": { borderLeftColor: "#D9A0B7" },
+  ".cm-selectionBackground": { backgroundColor: "#526274 !important" },
+}, { dark: true });
+function currentEditorText() { return editorView?.state.doc.toString() ?? ""; }
+function editorMode(filename) {
+  const ext = filename.split(".").pop().toLowerCase();
+  if (ext === "yml" || ext === "yaml") return [yaml()];
+  if (ext === "md") return [markdown()];
+  return [];
+}
 async function openEditor(filename) {
   const file = await request("/api/workspace/" + encodeURIComponent(filename));
-  editingName = filename; savedValue = file.content;
-  editorTitle.textContent = filename; editorText.value = file.content;
-  editorStatus.textContent = "Plik roboczy, UTF-8, max 64 KiB. Ctrl+S zapisuje.";
-  editor.hidden = false; editorOpen = true; editorText.focus();
+  editingName = filename;
+  savedValue = file.content;
+  editorTitle.textContent = filename;
+  editorStatus.textContent = "UTF-8 · do 64 KiB · Ctrl+S zapis · Esc zamyka";
+  editor.hidden = false;
+  editorOpen = true;
+  editorView?.destroy();
+  editorView = new EditorView({
+    state: EditorState.create({
+      doc: file.content,
+      extensions: [
+        basicSetup, editorMode(filename), syntaxHighlighting(defaultHighlightStyle),
+        editorTheme,
+        keymap.of([
+          { key: "Mod-s", run: () => { void saveEditor(); return true; } },
+          { key: "Escape", run: () => { closeEditor(); return true; } },
+        ]),
+      ],
+    }),
+    parent: editorMount,
+  });
+  editorView.focus();
 }
 function closeEditor() {
-  if (editorText.value !== savedValue && !confirm("Odrzucić niezapisane zmiany?")) return false;
-  editor.hidden = true; editorOpen = false; editingName = null;
-  drawPrompt(); requestAnimationFrame(refit);
+  if (currentEditorText() !== savedValue && !confirm("Odrzucić niezapisane zmiany?")) return false;
+  editorView?.destroy();
+  editorView = null;
+  editor.hidden = true;
+  editorOpen = false;
+  editingName = null;
+  drawPrompt();
+  requestAnimationFrame(refit);
   return true;
 }
 document.getElementById("editor-close").addEventListener("click", closeEditor);
 async function saveEditor() {
   if (!editingName) return;
+  const content = currentEditorText();
   editorStatus.textContent = "Zapisywanie...";
   try {
     await request("/api/workspace/" + encodeURIComponent(editingName), {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: editorText.value }) });
-    savedValue = editorText.value; editorStatus.textContent = "Zapisano " + editingName;
-  } catch(error) { editorStatus.textContent = error.message; }
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    savedValue = content;
+    editorStatus.textContent = "Zapisano " + editingName;
+  } catch (error) {
+    editorStatus.textContent = error.message || "Nie udało się zapisać";
+  }
 }
 document.getElementById("editor-save").addEventListener("click", saveEditor);
-editorText.addEventListener("keydown", event => {
-  if (event.ctrlKey && event.key.toLowerCase() === "s") { event.preventDefault(); saveEditor(); }
-  if (event.key === "Escape") { event.preventDefault(); closeEditor(); }
-  if (event.key === "Tab") {
-    event.preventDefault();
-    const start = editorText.selectionStart, end = editorText.selectionEnd;
-    editorText.setRangeText("  ", start, end, "end");
-  }
-});
 document.getElementById("editor-open").addEventListener("click", () => {
-  terminal.write("\r\n"); writeOutput("Otwórz edytor: edit notatki.md lub nano inventory.ini"); drawPrompt();
+  terminal.write("\r\n");
+  writeOutput("Edytor: edit notatki.md lub nano inventory.ini");
+  drawPrompt();
 });
 fetch("/api/me", {credentials:"same-origin"}).then(r => r.ok ? r.json() : null)
   .then(data => { if(data?.username) document.getElementById("username").textContent = data.username; }).catch(()=>{});
