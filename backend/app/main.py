@@ -351,6 +351,34 @@ def repository_diff(request: Request, name: str, path: str):
     return diff_repository_file(name, path)
 
 
+class GitCommitRequest(BaseModel):
+    files: list[str] = Field(min_length=1, max_length=30)
+    message: str = Field(min_length=1, max_length=200)
+    expected_head: str = Field(min_length=40, max_length=40)
+
+
+class GitPushRequest(BaseModel):
+    expected_head: str = Field(min_length=40, max_length=40)
+
+
+@app.get("/api/repositories/{name}/git-status")
+def repository_git_status(request: Request, name: str):
+    require_console_session(request, edit=True)
+    return git_status(name)
+
+
+@app.post("/api/repositories/{name}/commit")
+def repository_commit(request: Request, name: str, body: GitCommitRequest):
+    require_console_session(request, edit=True)
+    return commit_selected(name, body.files, body.message, body.expected_head)
+
+
+@app.post("/api/repositories/{name}/push")
+def repository_push(request: Request, name: str, body: GitPushRequest):
+    require_console_session(request, edit=True)
+    return push_explicit(name, body.expected_head)
+
+
 @app.delete("/api/repositories/{name}")
 def repositories_delete(request: Request, name: str):
     require_console_session(request, edit=True)
