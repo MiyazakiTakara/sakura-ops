@@ -98,3 +98,11 @@ def test_partial_and_static_commands(completion_data):
     matches, _ = console_completion.context_complete("show repositories")
     assert matches == ["show repositories"]
     assert console_completion.context_complete("show hosts\nrm -rf /")[0] == []
+
+
+def test_aliases_and_config_mode_show_commands(completion_data):
+    assert console_completion.context_complete("sta")[0] == ["status"]
+    assert console_completion.context_complete("ver")[0] == ["version"]
+    assert console_completion.context_complete("show hosts ans", "config")[0] == [
+        "show hosts ansible inventory/hosts.ini"
+    ]
