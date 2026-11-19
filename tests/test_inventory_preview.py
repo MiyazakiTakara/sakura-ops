@@ -154,3 +154,18 @@ def test_task_plan_cli_and_gui_wiring():
     assert 'request("/api/tasks/plan"' in js
     assert '@app.post("/api/tasks/plan")' in backend
     assert 'require_console_session(request, edit=True)' in backend
+
+
+def test_incomplete_console_commands_show_usage_instead_of_unknown():
+    commands = {
+        "show hosts": "show hosts ansible inventory/hosts.ini",
+        "show groups": "show groups ansible inventory/hosts.ini",
+        "task plan": "task plan ansible inventory/hosts.ini",
+        "show hosts ansible": "show hosts ansible inventory/hosts.ini",
+        "task plan ansible inventory/hosts.ini": "task plan ansible inventory/hosts.ini",
+    }
+    for command, expected in commands.items():
+        reply = interpret(command)["output"]
+        assert "Składnia:" in reply
+        assert expected in reply
+        assert "Nieznane polecenie" not in reply
