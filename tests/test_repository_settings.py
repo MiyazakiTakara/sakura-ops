@@ -194,3 +194,87 @@ def test_sync_console_actions():
     result = interpret("show repository ansible inventory")
     assert result["action"] == "repository-files"
     assert result["kind"] == "inventory"
+
+
+def test_git_file_read_write_and_revision_conflict(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    monkeypatch.setattr(git_sync, "WORKTREES", tmp_path)
+    repositories.add_repository("ansible", "https://git.example.org/team/r.git")
+    root = tmp_path / "ansible"
+    (root / ".git").mkdir(parents=True)
+    (root / "inventory").mkdir()
+    target = root / "inventory" / "hosts.ini"
+    target.write_text("[all]\\nnode1\\n".replace("\\n", "\n"), encoding="utf-8")
+    monkeypatch.setattr(git_sync, "list_cached_files",
+                        lambda name, kind: ["inventory/hosts.ini"] if kind == "inventory" else [])
+
+    original = git_sync.read_repository_file("ansible", "inventory/hosts.ini")
+    assert "[all]" in original["content"]
+    saved = git_sync.write_repository_file(
+        "ansible", "inventory/hosts.ini", "[all]\nnode2\n", original["revision"]
+    )
+    assert saved["content"] == "[all]\nnode2\n"
+    assert saved["revision"] != original["revision"]
+    with pytest.raises(HTTPException) as conflict:
+        git_sync.write_repository_file("ansible", "inventory/hosts.ini",
+                                       "wrong", original["revision"])
+    assert conflict.value.status_code == 409
+    assert target.read_text() == "[all]\nnode2\n"
+
+
+def test_git_file_rejects_escape_symlink_and_untracked(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    monkeypatch.setattr(git_sync, "WORKTREES", tmp_path)
+    repositories.add_repository("ansible", "https://git.example.org/team/r.git")
+    root = tmp_path / "ansible"
+    (root / ".git").mkdir(parents=True)
+    (root / "inventory").mkdir()
+    external = tmp_path / "outside.ini"
+    external.write_text("secret", encoding="utf-8")
+    (root / "inventory" / "linked.ini").symlink_to(external)
+    monkeypatch.setattr(git_sync, "list_cached_files",
+                        lambda name, kind: ["inventory/linked.ini"] if kind == "inventory" else [])
+    for path in ("../outside.ini", "inventory/../../outside.ini", "/etc/passwd",
+                 "playbooks/other.yaml", "inventory/unknown.ini", "inventory/linked.ini"):
+        with pytest.raises(HTTPException):
+            git_sync.read_repository_file("ansible", path)
+    assert external.read_text() == "secret"
+
+
+def test_git_file_rejects_oversize(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    monkeypatch.setattr(git_sync, "WORKTREES", tmp_path)
+    repositories.add_repository("ansible", "https://git.example.org/team/r.git")
+    root = tmp_path / "ansible"
+    (root / ".git").mkdir(parents=True)
+    (root / "playbooks").mkdir()
+    file = root / "playbooks" / "test.yml"
+    file.write_bytes(b"x" * 65537)
+    monkeypatch.setattr(git_sync, "list_cached_files",
+                        lambda name, kind: ["playbooks/test.yml"] if kind == "playbooks" else [])
+    with pytest.raises(HTTPException) as e:
+        git_sync.read_repository_file("ansible", "playbooks/test.yml")
+    assert e.value.status_code == 413
+
+
+def test_git_cli_edit_and_read_actions():
+    assert interpret("repository edit ansible inventory/hosts.ini")["action"] == "repository-edit"
+    result = interpret("show repository ansible file playbooks/audit.yml")
+    assert result["action"] == "repository-read"
+    assert result["filename"] == "playbooks/audit.yml"
+
+
+def test_git_file_pages_api_and_editor_present():
+    from pathlib import Path
+    base = Path(__file__).resolve().parents[1]
+    html = (base / "backend/app/static/dashboard.html").read_text()
+    js = (base / "frontend/src/terminal.js").read_text()
+    api = (base / "backend/app/main.py").read_text()
+    for element in ("nav-inventory", "nav-playbooks", "git-file-editor", "git-file-save"):
+        assert f'id="{element}"' in html
+    assert "new EditorView" in js and "gitFileRevision" in js
+    assert '@app.put("/api/repositories/{name}/content")' in api
+    assert "require_console_session(request, edit=True)" in api
