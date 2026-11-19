@@ -12,3 +12,14 @@ build/
 *.sqlite*
 *.log
 secrets/
+data/
+data/
+
+.secrets/
+
+# SakuraOps runtime
+data/
+.secrets/
+*.db
+*.sqlite*
+.env
