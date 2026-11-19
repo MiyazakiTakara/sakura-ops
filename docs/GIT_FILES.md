@@ -10,11 +10,14 @@ CodeMirror i zapisać lokalnie. Nie wywołują Ansible.
 SakuraOps# show repository ansible inventory
 SakuraOps# show repository ansible playbooks
 SakuraOps# show repository ansible file inventory/hosts.ini
+SakuraOps# show repository ansible diff inventory/hosts.ini
 SakuraOps# repository edit ansible playbooks/linux-inventory.yml
 ```
 
 Ostatnia komenda przełącza panel na odpowiedni widok i otwiera plik
-w graficznym edytorze. GUI i CLI używają tych samych endpointów i zasad
+w graficznym edytorze. Przycisk **Pokaż różnice** pokazuje lokalny Git diff
+zapisanego pliku względem commita (bez wykonywania commit/push).
+GUI i CLI używają tych samych endpointów i zasad
 uprawnień administratora.
 
 ## Ograniczenia
