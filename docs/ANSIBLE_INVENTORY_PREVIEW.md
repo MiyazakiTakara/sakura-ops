@@ -71,3 +71,24 @@ autoryzacja akcji, jawne wybranie inventory, playbooka i limitu hostów,
 walidacja składni, izolacja procesu, zablokowane niebezpieczne rozszerzenia,
 limity czasu/zasobów, kolejka, dziennik audytowy i kontrolowany dostęp SSH.
 Ten PR **nie uruchamia żadnych zadań Ansible**.
+
+## Podpowiedzi Tab w konsoli
+
+Konsola `skr` uzupełnia kolejne argumenty na podstawie dozwolonych
+poleceń i aktualnej konfiguracji SakuraOps, również po wpisaniu samej
+nazwy polecenia. Przykłady:
+
+- `show hosts` + Tab — podpowiada repozytorium i plik inventory
+- `show groups` + Tab — te same źródła inventory
+- `task plan` + Tab — repozytorium, inventory, playbook oraz grupę
+- `repository sync`, `repository edit`, `repository push` + Tab —
+  odpowiednio repozytoria, śledzone pliki i aktualny SHA
+- `show repository` + Tab — repozytorium, rodzaj danych i pliki
+- `edit`, `nano` i `cat` + Tab — pliki z lokalnego workspace
+
+Gdy następny argument ma jedną wartość, Tab może uzupełnić kilka kolejnych
+argumentów. Gdy wartości jest wiele, kolejny Tab pokazuje wybór. Danych,
+których nie można bezpiecznie wywnioskować (nowa nazwa repozytorium, URL,
+opis commita), SakuraOps nie wymyśla — pokazuje wskazówkę składni.
+Wyniki pochodzą wyłącznie z istniejącego, lokalnego stanu aplikacji;
+podpowiedzi nie wykonują Ansible ani operacji zapisujących Git.
