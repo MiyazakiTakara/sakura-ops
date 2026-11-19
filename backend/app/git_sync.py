@@ -264,3 +264,13 @@ def write_repository_file(name: str, filename: str, content: str, revision: str)
         return read_repository_file(name, filename)
     finally:
         os.close(fd)
+
+
+def diff_repository_file(name: str, filename: str) -> dict:
+    _editable_path(name, filename)
+    root = _location(name)
+    difference = _git(["-C", str(root), "diff", "--no-ext-diff",
+                       "--no-textconv", "--", filename])
+    if len(difference.encode("utf-8")) > 131072:
+        raise HTTPException(413, "Różnice przekraczają limit podglądu 128 KiB")
+    return {"repository": name, "path": filename, "diff": difference}
