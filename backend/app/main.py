@@ -313,7 +313,7 @@ async def repository_events(request: Request):
     async def stream():
         previous = await asyncio.to_thread(repository_fingerprint)
         # Initial handshake does not force a redundant list refresh.
-        yield ": connected\\nretry: 2000\\n\\n"
+        yield "event: repositories-changed\ndata: {}\nretry: 2000\n\n"
         elapsed = 0
         while not await request.is_disconnected():
             await asyncio.sleep(1)
@@ -326,9 +326,9 @@ async def repository_events(request: Request):
             current = await asyncio.to_thread(repository_fingerprint)
             if current != previous:
                 previous = current
-                yield "event: repositories-changed\\ndata: {}\\n\\n"
+                yield "event: repositories-changed\ndata: {}\n\n"
             elif elapsed % 15 == 0:
-                yield ": heartbeat\\n\\n"
+                yield ": heartbeat\n\n"
 
     return StreamingResponse(
         stream(),
