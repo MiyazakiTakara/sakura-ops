@@ -165,7 +165,7 @@ from .commands import interpret, complete
 from .workspace import list_files, read_text, write_text
 from .inventory import discover
 from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
-from .git_sync import synchronize, list_cached_files, read_repository_file, write_repository_file
+from .git_sync import synchronize, list_cached_files, read_repository_file, write_repository_file, diff_repository_file
 
 
 class ConsoleCommand(BaseModel):
@@ -201,7 +201,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
-    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit"):
+    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
         if action == "repositories-list":
@@ -216,6 +216,8 @@ def console_execute(request: Request, body: ConsoleCommand):
         elif action == "repository-sync":
             state = synchronize(result["name"])
             result["output"] = f"Synchronizacja zakończona: {state['commit_sha'][:12]}"
+        elif action == "repository-diff":
+            result["output"] = diff_repository_file(result["name"], result["filename"])["diff"] or "Brak lokalnych zmian."
         elif action == "repository-read":
             file = read_repository_file(result["name"], result["filename"])
             result["output"] = file["content"]
@@ -328,6 +330,12 @@ def repository_content_get(request: Request, name: str, path: str):
 def repository_content_put(request: Request, name: str, path: str, body: RepositoryFileWrite):
     require_console_session(request, edit=True)
     return write_repository_file(name, path, body.content, body.revision)
+
+
+@app.get("/api/repositories/{name}/diff")
+def repository_diff(request: Request, name: str, path: str):
+    require_console_session(request, edit=True)
+    return diff_repository_file(name, path)
 
 
 @app.delete("/api/repositories/{name}")
