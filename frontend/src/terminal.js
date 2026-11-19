@@ -296,15 +296,44 @@ const repoStatus = document.getElementById("repo-status");
 let repoLoading = false;
 let repoRefreshQueued = false;
 let repoSnapshot = null;
-const REPOSITORY_REFRESH_MS = 5000;
+const FALLBACK_REFRESH_MS = 30000;
+let repoEvents = null;
+let repoEventsFallback = false;
 
 function updateRepositoriesWhenVisible() {
   if (!repositoryView.hidden && document.visibilityState === "visible") {
     void refreshRepositories();
   }
 }
-window.setInterval(updateRepositoriesWhenVisible, REPOSITORY_REFRESH_MS);
-document.addEventListener("visibilitychange", updateRepositoriesWhenVisible);
+
+function connectRepositoryEvents() {
+  if (repoEvents || typeof EventSource === "undefined") return;
+  repoEvents = new EventSource("/api/repositories/events");
+  repoEvents.addEventListener("repositories-changed", updateRepositoriesWhenVisible);
+  repoEvents.addEventListener("open", () => { repoEventsFallback = false; });
+  repoEvents.addEventListener("error", () => { repoEventsFallback = true; });
+}
+function disconnectRepositoryEvents() {
+  if (repoEvents) {
+    repoEvents.close();
+    repoEvents = null;
+  }
+  repoEventsFallback = false;
+}
+// Fallback only when SSE is unavailable or disconnected, and only on a visible view.
+window.setInterval(() => {
+  if (repoEventsFallback || typeof EventSource === "undefined") {
+    updateRepositoriesWhenVisible();
+  }
+}, FALLBACK_REFRESH_MS);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (!repositoryView.hidden) connectRepositoryEvents();
+    updateRepositoriesWhenVisible();
+  } else {
+    disconnectRepositoryEvents();
+  }
+});
 window.addEventListener("focus", updateRepositoriesWhenVisible);
 
 function setView(view) {
@@ -315,7 +344,9 @@ function setView(view) {
     navRepositories.setAttribute("aria-current", "page");
     navDashboard.removeAttribute("aria-current");
     void refreshRepositories();
+    if (document.visibilityState === "visible") connectRepositoryEvents();
   } else {
+    disconnectRepositoryEvents();
     navDashboard.setAttribute("aria-current", "page");
     navRepositories.removeAttribute("aria-current");
   }
