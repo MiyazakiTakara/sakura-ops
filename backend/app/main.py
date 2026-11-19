@@ -8,6 +8,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -18,6 +19,7 @@ secret_file = Path(__file__).resolve().parents[2] / ".secrets/session_key"
 secret = secret_file.read_text().strip()
 
 app = FastAPI(title="SakuraOps", docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 app.add_middleware(
     SessionMiddleware,
