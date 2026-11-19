@@ -23,6 +23,7 @@ COMMANDS = {
     "repository sync <name>": "Ręcznie pobierz dane repozytorium (SSH, tylko odczyt)",
     "show repository <name> inventory|playbooks": "Lista plików z cache Git",
     "show repository <name> file <path>": "Pokaż zawartość pliku (do 64 KiB)",
+    "show repository <name> diff <path>": "Pokaż lokalne różnice Git",
     "repository edit <name> <path>": "Edytuj lokalny plik inventory/playbook",
 }
 
@@ -74,6 +75,8 @@ def interpret(command: str, mode: str = "exec") -> dict:
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
     if name == "repository" and mode == "exec" and len(args) == 4 and lowered[1] == "edit":
         return result("", action="repository-edit", name=args[2], filename=args[3])
+    if name == "show" and len(args) == 5 and lowered[1] == "repository" and lowered[3] == "diff":
+        return result("", action="repository-diff", name=args[2], filename=args[4])
     if name == "show" and len(args) == 5 and lowered[1] == "repository" and lowered[3] == "file":
         return result("", action="repository-read", name=args[2], filename=args[4])
     if name == "repository" and mode == "exec" and len(args) == 3 and lowered[1] == "sync":
