@@ -114,47 +114,79 @@ def test_sse_fingerprint_changes_with_repository_configuration(repository_databa
     assert repository_fingerprint() == before
 
 
-def test_manual_sync_uses_pinned_ssh_and_no_checkout(repository_database, monkeypatch, tmp_path):
+def test_normal_git_first_clone_then_fast_forward(repository_database, monkeypatch, tmp_path):
     from backend.app import git_sync
     monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
-    root = tmp_path / "mirrors"
-    root.mkdir()
-    monkeypatch.setattr(git_sync, "MIRRORS", root)
-    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
+    monkeypatch.setattr(git_sync, "WORKTREES", tmp_path)
     calls = []
+    url = "https://git.example.org/team/ansible.git"
 
-    def fake_settings(url):
-        assert url.startswith("ssh://git@")
-        return "git.example.org", ["ssh", "-F", "/dev/null"]
-
-    def fake_git(args, ssh=None, credentials=None):
-        calls.append((args, ssh))
+    def fake_git(args, timeout=90):
+        calls.append(args)
+        if "clone" in args:
+            folder = tmp_path / args[-1] if not args[-1].startswith("/") else __import__("pathlib").Path(args[-1])
+            folder.mkdir()
+            (folder / ".git").mkdir()
         if "rev-parse" in args:
             return "a" * 40
-        if "ls-tree" in args:
-            return "\n".join(["inventory/prod.yml", "playbooks/audit.yaml", "README.md"])
+        if "remote.origin.url" in args:
+            return url
+        if "branch" in args:
+            return "main"
+        if "ls-files" in args:
+            return "inventory/production.yml\\nplaybooks/update.yaml"
         return ""
 
-    monkeypatch.setattr(git_sync, "_settings", fake_settings)
     monkeypatch.setattr(git_sync, "_git", fake_git)
-    repositories.add_repository("ansible", "ssh://git@git.example.org/team/ansible.git")
-    result = git_sync.synchronize("ansible")
-    assert result["commit_sha"] == "a" * 40
-    assert git_sync.list_cached_files("ansible", "inventory") == ["inventory/prod.yml"]
-    assert git_sync.list_cached_files("ansible", "playbooks") == ["playbooks/audit.yaml"]
-    assert not any("checkout" in parts for parts, _ in calls)
-    assert not any("push" in parts for parts, _ in calls)
-    assert any("fetch" in parts and ssh is not None for parts, ssh in calls)
-    rows = repositories.list_repositories()
-    assert rows[0]["sync_status"] == "synced"
+    repositories.add_repository("ansible", url)
+    first = git_sync.synchronize("ansible")
+    assert first["commit_sha"] == "a" * 40
+    assert (tmp_path / "ansible" / ".git").is_dir()
+    assert git_sync.list_cached_files("ansible", "inventory") == ["inventory/production.yml"]
+    second = git_sync.synchronize("ansible")
+    assert second["commit_sha"] == first["commit_sha"]
+    assert sum(1 for cmd in calls if "clone" in cmd) == 1
+    assert sum(1 for cmd in calls if "fetch" in cmd) == 1
+    assert any("merge" in cmd and "--ff-only" in cmd for cmd in calls)
+    assert not any("push" in cmd for cmd in calls)
 
 
-def test_ssh_sync_is_disabled_without_operator_approval(monkeypatch):
-    from backend.app.git_sync import _settings
-    monkeypatch.delenv("SAKURAOPS_GIT_ALLOWED_HOSTS", raising=False)
-    with pytest.raises(HTTPException) as exc:
-        _settings("ssh://git@git.example.org/team/ansible.git")
-    assert exc.value.status_code == 403
+def test_dirty_worktree_is_not_overwritten(repository_database, monkeypatch, tmp_path):
+    from backend.app import git_sync
+    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
+    monkeypatch.setattr(git_sync, "WORKTREES", tmp_path)
+    target = tmp_path / "ansible"
+    (target / ".git").mkdir(parents=True)
+    url = "https://git.example.org/team/ansible.git"
+    repositories.add_repository("ansible", url)
+    commands = []
+
+    def fake_git(args, timeout=90):
+        commands.append(args)
+        if "remote.origin.url" in args:
+            return url
+        if "branch" in args:
+            return "main"
+        if "status" in args:
+            return " M inventory/prod.yml"
+        return ""
+
+    monkeypatch.setattr(git_sync, "_git", fake_git)
+    with pytest.raises(HTTPException) as error:
+        git_sync.synchronize("ansible")
+    assert error.value.status_code == 409
+    assert not any("fetch" in cmd or "merge" in cmd for cmd in commands)
+
+
+def test_git_sync_does_not_use_unapproved_hosts(monkeypatch):
+    from backend.app.git_sync import _check_remote
+    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
+    _check_remote("https://git.example.org/team/repo")
+    _check_remote("ssh://git@git.example.org/team/repo")
+    with pytest.raises(HTTPException):
+        _check_remote("file:///etc/passwd")
+    with pytest.raises(HTTPException):
+        _check_remote("https://other.example.org/team/repo")
 
 
 def test_sync_console_actions():
@@ -162,49 +194,3 @@ def test_sync_console_actions():
     result = interpret("show repository ansible inventory")
     assert result["action"] == "repository-files"
     assert result["kind"] == "inventory"
-
-
-def test_https_sync_without_token_uses_allowlisted_host(repository_database, monkeypatch, tmp_path):
-    from backend.app import git_sync
-    monkeypatch.setattr(git_sync, "SessionLocal", repositories.SessionLocal)
-    mirrors = tmp_path / "mirrors"
-    mirrors.mkdir()
-    monkeypatch.setattr(git_sync, "MIRRORS", mirrors)
-    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
-    calls = []
-
-    def fake_git(args, ssh=None, credentials=None):
-        calls.append((args, ssh, credentials))
-        if "rev-parse" in args:
-            return "b" * 40
-        return ""
-
-    monkeypatch.setattr(git_sync, "_git", fake_git)
-    repositories.add_repository("httpsrepo", "https://git.example.org/team/ansible.git")
-    result = git_sync.synchronize("httpsrepo")
-    assert result["commit_sha"] == "b" * 40
-    assert any("fetch" in args and ssh is None and not credentials
-               for args, ssh, credentials in calls)
-
-
-def test_https_token_requires_private_file(monkeypatch, tmp_path):
-    from backend.app.git_sync import _https_credentials
-    token_file = tmp_path / "token"
-    token_file.write_text("secret")
-    monkeypatch.setenv("SAKURAOPS_GIT_TOKEN_FILE_ANSIBLE", str(token_file))
-    with pytest.raises(HTTPException):
-        _https_credentials("ansible")
-    token_file.chmod(0o600)
-    credentials = _https_credentials("ansible")
-    import base64
-    assert base64.b64decode(credentials["GIT_CONFIG_VALUE_0"].split("Basic ")[1]) == b"oauth2:secret"
-    assert "secret" not in str(credentials.keys())
-
-
-def test_https_rejects_hosts_not_allowlisted(monkeypatch):
-    from backend.app.git_sync import _allowed_host
-    monkeypatch.setenv("SAKURAOPS_GIT_ALLOWED_HOSTS", "git.example.org")
-    with pytest.raises(HTTPException) as exc:
-        _allowed_host("https://unknown.example.org/team/ansible")
-    assert exc.value.status_code == 403
-    assert _allowed_host("https://git.example.org/team/ansible")[0] == "https"
