@@ -434,6 +434,7 @@ function setView(view) {
   }
   if (showRepo) {
     void refreshRepositories();
+    void loadChangeRepositories();
     if (document.visibilityState === "visible") connectRepositoryEvents();
   } else {
     disconnectRepositoryEvents();
@@ -583,6 +584,129 @@ repoForm.addEventListener("submit", async event => {
     submit.disabled = false;
   }
 });
+const changesRepoSelect = document.getElementById("changes-repository");
+const changesSummary = document.getElementById("changes-summary");
+const changesFiles = document.getElementById("changes-files");
+const changesMessage = document.getElementById("changes-message");
+const changesCommit = document.getElementById("changes-commit");
+const changesPush = document.getElementById("changes-push");
+const changesStatus = document.getElementById("changes-status");
+let changesHead = null;
+
+function changeUrl(path) {
+  return "/api/repositories/" + encodeURIComponent(changesRepoSelect.value) + path;
+}
+function selectedChangedFiles() {
+  return [...changesFiles.querySelectorAll("input:checked")].map(input => input.value);
+}
+function updateCommitButton() {
+  changesCommit.disabled = !changesHead || !selectedChangedFiles().length ||
+    !changesMessage.value.trim();
+}
+async function loadChangeRepositories() {
+  if (repositoryView.hidden) return;
+  try {
+    const current = changesRepoSelect.value;
+    const payload = await request("/api/repositories");
+    changesRepoSelect.replaceChildren();
+    for (const repo of payload.repositories) {
+      const option = document.createElement("option");
+      option.value = repo.name;
+      option.textContent = repo.name + " · " + repo.branch;
+      changesRepoSelect.append(option);
+    }
+    if (payload.repositories.some(repo => repo.name === current)) changesRepoSelect.value = current;
+    await refreshGitChanges();
+  } catch (error) {
+    changesStatus.textContent = error.message || "Nie udało się odczytać konfiguracji.";
+  }
+}
+async function refreshGitChanges() {
+  changesHead = null;
+  changesCommit.disabled = true;
+  changesPush.disabled = true;
+  changesFiles.replaceChildren();
+  if (!changesRepoSelect.value) {
+    changesSummary.textContent = "Brak repozytoriów.";
+    return;
+  }
+  const repo = changesRepoSelect.value;
+  try {
+    const state = await request(changeUrl("/git-status"));
+    if (repo !== changesRepoSelect.value) return;
+    changesHead = state.head;
+    changesSummary.textContent = "Gałąź: " + state.branch + " · HEAD: " + state.head;
+    for (const file of state.modified_files) {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = file;
+      checkbox.addEventListener("change", updateCommitButton);
+      label.append(checkbox, document.createTextNode(file));
+      changesFiles.append(label);
+    }
+    if (!state.modified_files.length) {
+      changesFiles.append(repoText("p", "Brak zmodyfikowanych plików inventory/playbooków.", "repo-note"));
+    }
+    if (state.other_changes) {
+      changesFiles.append(repoText("p", "Uwaga: repozytorium zawiera także inne zmiany Git.", "repo-note"));
+    }
+    changesPush.disabled = false;
+    updateCommitButton();
+    changesStatus.textContent = "Wybierz pliki do lokalnego commita lub osobno wykonaj push.";
+  } catch (error) {
+    changesSummary.textContent = "Nie udało się sprawdzić stanu Git.";
+    changesStatus.textContent = error.message || "Błąd odczytu statusu.";
+  }
+}
+
+changesRepoSelect.addEventListener("change", () => { void refreshGitChanges(); });
+document.getElementById("changes-refresh").addEventListener("click", () => { void refreshGitChanges(); });
+changesMessage.addEventListener("input", updateCommitButton);
+changesCommit.addEventListener("click", async () => {
+  const files = selectedChangedFiles();
+  const name = changesRepoSelect.value;
+  const head = changesHead;
+  const message = changesMessage.value.trim();
+  if (!files.length || !head || !message) return;
+  if (!confirm("Utworzyć lokalny commit dla " + files.length + " plików w " + name + "?\n" +
+               "Nie zostanie wykonany push.")) return;
+  changesCommit.disabled = true;
+  changesStatus.textContent = "Tworzenie commita...";
+  try {
+    const result = await request(changeUrl("/commit"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files, message, expected_head: head }),
+    });
+    changesStatus.textContent = "Utworzono lokalny commit " + result.commit_sha.slice(0, 12) + ".";
+    changesMessage.value = "";
+    await refreshGitChanges();
+  } catch (error) {
+    changesStatus.textContent = error.message || "Nie udało się utworzyć commita.";
+    await refreshGitChanges();
+  }
+});
+changesPush.addEventListener("click", async () => {
+  const name = changesRepoSelect.value;
+  const head = changesHead;
+  if (!head || !name) return;
+  if (!confirm("Wysłać do origin commit " + head.slice(0, 12) + " repozytorium " + name +
+               "?\nTo operacja zdalna. Nie używa --force.")) return;
+  changesPush.disabled = true;
+  changesStatus.textContent = "Wysyłanie zmian Git...";
+  try {
+    const response = await request(changeUrl("/push"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expected_head: head }),
+    });
+    changesStatus.textContent = "Push zakończony: " + response.pushed_sha.slice(0, 12);
+    await refreshGitChanges();
+  } catch (error) {
+    changesStatus.textContent = error.message || "Push nie powiódł się.";
+    await refreshGitChanges();
+  }
+});
+
 const fileRepoSelect = document.getElementById("files-repository");
 const gitFilesList = document.getElementById("git-files-list");
 const gitFileMount = document.getElementById("git-file-editor");
