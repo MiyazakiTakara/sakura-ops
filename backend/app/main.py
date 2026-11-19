@@ -163,6 +163,7 @@ from pydantic import BaseModel, Field
 from .commands import interpret, complete
 from .workspace import list_files, read_text, write_text
 from .inventory import discover
+from .repositories import list_repositories, add_repository, delete_repository
 
 
 class ConsoleCommand(BaseModel):
@@ -197,6 +198,24 @@ def console_execute(request: Request, body: ConsoleCommand):
         heading, paths = discover(result["kind"])
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
+    action = result.get("action")
+    if action in ("repositories-list", "repository-add", "repository-delete"):
+        if user["role"] != "admin":
+            raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
+        if action == "repositories-list":
+            repositories = list_repositories()
+            result["output"] = ("\\n".join(
+                f"{row['name']}  {row['branch']}  {row['url']}  (bez synchronizacji)"
+                for row in repositories
+            ) or "Brak skonfigurowanych repozytoriów.")
+        elif action == "repository-add":
+            row = add_repository(result["name"], result["url"], result["branch"])
+            result["output"] = f"Zapisano repozytorium {row['name']} (bez synchronizacji Git)."
+        else:
+            delete_repository(result["name"])
+            result["output"] = f"Usunięto konfigurację {result['name']}."
+        for field in ("action", "name", "url", "branch"):
+            result.pop(field, None)
     return result
 
 class CompletionRequest(BaseModel):
@@ -244,3 +263,30 @@ def workspace_write(request: Request, filename: str, body: WorkspaceWrite):
     require_console_session(request, edit=True)
     write_text(filename, body.content)
     return {"saved": True, "filename": filename}
+
+
+class RepositoryInput(BaseModel):
+    name: str = Field(min_length=2, max_length=40)
+    url: str = Field(min_length=10, max_length=500)
+    branch: str = Field(default="main", min_length=1, max_length=100)
+
+
+@app.get("/api/repositories")
+def repositories_get(request: Request):
+    user = require_console_session(request)
+    if user["role"] != "admin":
+        raise HTTPException(403, "Dostęp wymaga roli administratora")
+    return {"repositories": list_repositories()}
+
+
+@app.post("/api/repositories", status_code=201)
+def repositories_post(request: Request, body: RepositoryInput):
+    require_console_session(request, edit=True)
+    return add_repository(body.name, body.url, body.branch)
+
+
+@app.delete("/api/repositories/{name}")
+def repositories_delete(request: Request, name: str):
+    require_console_session(request, edit=True)
+    delete_repository(name)
+    return {"deleted": name}
