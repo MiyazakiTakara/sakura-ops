@@ -131,7 +131,7 @@ def test_manual_sync_uses_pinned_ssh_and_no_checkout(repository_database, monkey
         if "rev-parse" in args:
             return "a" * 40
         if "ls-tree" in args:
-            return "inventory/prod.yml\\nplaybooks/audit.yaml\\nREADME.md"
+            return "\n".join(["inventory/prod.yml", "playbooks/audit.yaml", "README.md"])
         return ""
 
     monkeypatch.setattr(git_sync, "_settings", fake_settings)
