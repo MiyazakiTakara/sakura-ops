@@ -17,7 +17,23 @@ button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus
 .nav button{display:flex;gap:10px;width:100%;align-items:center;text-align:left;border:0;border-radius:14px;padding:11px 12px;background:transparent;color:#D1D6DD;font-size:13px}
 .nav button[aria-current=page]{background:#3D3441;color:#F2C1D5}.nav button:disabled{opacity:.47;cursor:not-allowed}
 .nav .sym{width:18px;text-align:center;font-size:15px}
-.workspace{flex:1;min-width:0;max-width:1100px}.heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:22px}
+.workspace{flex:1;min-width:0;max-width:1100px}
+.workspace [hidden]{display:none!important}
+.repo-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(90px,.7fr) auto;gap:10px;align-items:end;margin-top:18px}
+.repo-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.repo-field label{color:var(--muted);font-size:12px}
+.repo-field input{width:100%;min-width:0;border:1px solid #516071;background:#151C24;color:var(--text);padding:10px 12px;border-radius:7px;font-size:13px}
+.repo-add,.repo-delete{border:1px solid #9A7788;border-radius:7px;padding:10px 12px;background:#D9A0B7;color:#172029;font-size:13px;font-weight:600}
+.repo-delete{background:transparent;color:#F0C4D3;border-color:#725965}
+.repo-list{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.repo-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;border:1px solid #444F5B;border-radius:8px}
+.repo-details{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.repo-url{color:var(--muted);overflow-wrap:anywhere}
+.repo-note{color:var(--muted);font-size:12px}
+#repo-status{color:var(--muted);font-size:12px;margin-top:12px;min-height:18px}
+@media(max-width:900px){.repo-form{grid-template-columns:1fr 1fr}.repo-form .repo-field:nth-child(2){grid-column:1/-1;grid-row:2}.repo-add{grid-column:2;grid-row:3}}
+@media(max-width:600px){.repo-form{display:flex;flex-direction:column;align-items:stretch}.repo-add{width:100%}.repo-row{align-items:flex-start;flex-direction:column}}
+.heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:22px}
 h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12px}
 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
 .metric,.panel{background:var(--panel);border-radius:11px;padding:20px}
@@ -59,14 +75,16 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 </header>
 <div class="layout">
   <nav class="nav" aria-label="Główna nawigacja">
-    <button type="button" aria-current="page"><span class="sym">▦</span><span class="navtext">Pulpit</span></button>
+    <button id="nav-dashboard" type="button" aria-current="page"><span class="sym">▦</span><span class="navtext">Pulpit</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">▤</span><span class="navtext">Serwery</span></button>
     <button type="button" id="open-terminal"><span class="sym">⌘</span><span class="navtext">Terminal</span></button>
+    <button type="button" id="nav-repositories"><span class="sym">⑂</span><span class="navtext">Repozytoria</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">▷</span><span class="navtext">Zadania</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">▦</span><span class="navtext">Harmonogramy</span></button>
     <button type="button" disabled title="W przygotowaniu"><span class="sym">⚙</span><span class="navtext">Ustawienia</span></button>
   </nav>
   <main class="workspace">
+   <div id="dashboard-view">
     <div class="heading"><h1>Pulpit</h1><span class="sub">SakuraOps 0.1.0-dev</span></div>
     <div class="metrics">
       <div class="metric"><div class="label">Konsola</div><div class="value">Gotowa</div></div>
@@ -74,6 +92,25 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
       <div class="metric"><div class="label">Tryb pracy</div><div class="value">Lokalny</div></div>
     </div>
     <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Wpisz ? lub help. Polecenie edit notatki.md otwiera edytor bezpiecznych plików roboczych. Zarządzanie serwerami i automatyzacje pojawią się później.</p></section>
+   </div>
+   <section id="repository-view" hidden aria-label="Repozytoria Git">
+    <div class="heading"><h1>Repozytoria</h1><span class="sub">Konfiguracja Git</span></div>
+    <div class="panel">
+      <h2>Dodaj repozytorium</h2>
+      <p>Konfiguracja bez automatycznej synchronizacji, klonowania i dostępu do serwerów. Nie wklejaj tokenów ani haseł do adresu.</p>
+      <form class="repo-form" id="repo-form">
+        <div class="repo-field"><label for="repo-name">Nazwa</label><input id="repo-name" name="name" placeholder="ansible" pattern="[a-z][a-z0-9_-]{1,39}" maxlength="40" required></div>
+        <div class="repo-field"><label for="repo-url">Adres Git (HTTPS/SSH)</label><input id="repo-url" name="url" type="text" placeholder="https://git.example.org/team/ansible.git" maxlength="500" required></div>
+        <div class="repo-field"><label for="repo-branch">Gałąź</label><input id="repo-branch" name="branch" value="main" maxlength="100" required></div>
+        <button class="repo-add" type="submit" id="repo-submit">Dodaj</button>
+      </form>
+      <div id="repo-status" role="status" aria-live="polite"></div>
+    </div>
+    <div class="panel">
+      <h2>Skonfigurowane repozytoria</h2>
+      <div class="repo-list" id="repo-list"><p class="repo-note">Odczytywanie konfiguracji…</p></div>
+    </div>
+   </section>
   </main>
 </div>
 <section id="window" aria-label="Terminal SakuraOps" role="region" hidden>
