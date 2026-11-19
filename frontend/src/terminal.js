@@ -176,7 +176,15 @@ async function autocomplete() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prefix: line }) });
     const choices = data.matches;
-    if (!choices.length) return;
+    if (!choices.length) {
+      if (data.hint && lastCompletionList !== line) {
+        terminal.write("\\r\\n");
+        writeOutput(data.hint);
+        drawPrompt();
+        lastCompletionList = line;
+      }
+      return;
+    }
     const shared = commonPrefix(choices);
     if (shared.length > line.length && cursor === Array.from(line).length) {
       replaceLine(shared + (choices.length === 1 && !shared.endsWith(" ") ? " " : ""));
