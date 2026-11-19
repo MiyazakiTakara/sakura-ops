@@ -101,7 +101,7 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     <div class="heading"><h1>Repozytoria</h1><span class="sub">Konfiguracja Git</span></div>
     <div class="panel">
       <h2>Dodaj repozytorium</h2>
-      <p>Konfiguracja i ręczna synchronizacja SSH tylko do odczytu. Synchronizacja wymaga wcześniej zatwierdzonego klucza SSH oraz zweryfikowanego hosta. Nie wklejaj tokenów ani haseł do adresu.</p>
+      <p>Ręczna synchronizacja HTTPS lub SSH tylko do odczytu. Dla prywatnego repozytorium użyj skonfigurowanego tokenu HTTPS albo klucza SSH. Nigdy nie wpisuj poświadczeń w adres Git.</p>
       <form class="repo-form" id="repo-form">
         <div class="repo-field"><label for="repo-name">Nazwa</label><input id="repo-name" name="name" placeholder="ansible" pattern="[a-z][a-z0-9_-]{1,39}" maxlength="40" required></div>
         <div class="repo-field"><label for="repo-url">Adres Git (HTTPS/SSH)</label><input id="repo-url" name="url" type="text" placeholder="https://git.example.org/team/ansible.git" maxlength="500" required></div>
