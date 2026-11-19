@@ -166,6 +166,7 @@ from .workspace import list_files, read_text, write_text
 from .inventory import discover
 from .repositories import list_repositories, add_repository, delete_repository, repository_fingerprint
 from .git_sync import synchronize, list_cached_files, read_repository_file, write_repository_file, diff_repository_file
+from .git_changes import git_status, commit_selected, push_explicit
 
 
 class ConsoleCommand(BaseModel):
@@ -201,7 +202,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
-    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff"):
+    if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff", "repository-status", "repository-commit", "repository-push"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
         if action == "repositories-list":
@@ -216,6 +217,18 @@ def console_execute(request: Request, body: ConsoleCommand):
         elif action == "repository-sync":
             state = synchronize(result["name"])
             result["output"] = f"Synchronizacja zakończona: {state['commit_sha'][:12]}"
+        elif action == "repository-status":
+            status = git_status(result["name"])
+            result["output"] = ("Gałąź: " + status["branch"] + "  HEAD: " + status["head"]
+                                + "\n" + ("Zmodyfikowane:\n" + "\n".join(status["modified_files"])
+                                           if status["modified_files"] else "Brak plików do commita."))
+        elif action == "repository-commit":
+            entry = commit_selected(result["name"], result["files"],
+                                    result["message"], result["expected_head"])
+            result["output"] = "Commit lokalny: " + entry["commit_sha"] + " (bez push)"
+        elif action == "repository-push":
+            pushed = push_explicit(result["name"], result["expected_head"])
+            result["output"] = "Wysłano " + pushed["pushed_sha"] + " do origin/" + pushed["branch"]
         elif action == "repository-diff":
             result["output"] = diff_repository_file(result["name"], result["filename"])["diff"] or "Brak lokalnych zmian."
         elif action == "repository-read":
@@ -232,7 +245,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         else:
             delete_repository(result["name"])
             result["output"] = f"Usunięto konfigurację {result['name']}."
-        for field in ("action", "name", "url", "branch", "kind", "filename"):
+        for field in ("action", "name", "url", "branch", "kind", "filename", "files", "message", "expected_head"):
             result.pop(field, None)
     return result
 
