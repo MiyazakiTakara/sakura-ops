@@ -519,6 +519,7 @@ const gitFileSave = document.getElementById("git-file-save");
 const gitFileStatus = document.getElementById("git-file-status");
 let gitFileEditor = null;
 let gitFilePath = null;
+let gitFileRepository = null;
 let gitSavedValue = "";
 let gitFileRevision = "";
 
@@ -526,6 +527,7 @@ function resetGitFileEditor() {
   gitFileEditor?.destroy();
   gitFileEditor = null;
   gitFilePath = null;
+  gitFileRepository = null;
   gitSavedValue = "";
   gitFileRevision = "";
   gitFileMount.replaceChildren();
@@ -588,6 +590,7 @@ async function loadGitFile(name, path) {
       + "/content?path=" + encodeURIComponent(path));
     resetGitFileEditor();
     gitFilePath = path;
+    gitFileRepository = name;
     gitSavedValue = data.content;
     gitFileRevision = data.revision;
     document.getElementById("git-file-title").textContent = path;
@@ -624,7 +627,7 @@ async function saveGitFile() {
   const content = gitFileEditor.state.doc.toString();
   gitFileSave.disabled = true;
   try {
-    const name = fileRepoSelect.value;
+    const name = gitFileRepository;
     const saved = await request("/api/repositories/" + encodeURIComponent(name)
       + "/content?path=" + encodeURIComponent(gitFilePath), {
       method: "PUT",
@@ -633,8 +636,12 @@ async function saveGitFile() {
     });
     gitSavedValue = saved.content;
     gitFileRevision = saved.revision;
-    document.getElementById("git-file-dirty").textContent = "";
-    gitFileStatus.textContent = "Zapisano lokalnie. Zmiany nie zostały wysłane do Git.";
+    const dirty = gitFileEditor?.state.doc.toString() !== gitSavedValue;
+    gitFileSave.disabled = !dirty;
+    document.getElementById("git-file-dirty").textContent = dirty ? "Niezapisane zmiany" : "";
+    gitFileStatus.textContent = dirty
+      ? "Zapisano poprzednią wersję. W edytorze są kolejne niezapisane zmiany."
+      : "Zapisano lokalnie. Zmiany nie zostały wysłane do Git.";
   } catch (error) {
     gitFileSave.disabled = false;
     gitFileStatus.textContent = error.message || "Zapis nie powiódł się.";
@@ -656,10 +663,17 @@ async function openFilePage(name, path) {
 
 fileRepoSelect.addEventListener("change", () => {
   if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
+      !confirm("Odrzucić niezapisane zmiany?")) {
+    fileRepoSelect.value = gitFileRepository;
+    return;
+  }
+  void refreshGitFiles();
+});
+document.getElementById("files-refresh").addEventListener("click", () => {
+  if (gitFileEditor && gitFileEditor.state.doc.toString() !== gitSavedValue &&
       !confirm("Odrzucić niezapisane zmiany?")) return;
   void refreshGitFiles();
 });
-document.getElementById("files-refresh").addEventListener("click", () => { void refreshGitFiles(); });
 gitFileSave.addEventListener("click", () => { void saveGitFile(); });
 
 fetch("/api/me", {credentials:"same-origin"}).then(r => r.ok ? r.json() : null)
