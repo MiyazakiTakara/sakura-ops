@@ -81,6 +81,14 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 #git-file-status{margin-top:10px;min-height:22px;overflow-wrap:anywhere}
 @media(max-width:680px){.files-layout{grid-template-columns:1fr}.git-files-list{min-height:90px;max-height:190px}#git-file-editor{height:310px}}
 #git-file-diff-output{white-space:pre-wrap;overflow-wrap:anywhere;max-height:250px;overflow:auto;background:#121A21;color:#C6D1DA;border:1px solid #465360;border-radius:7px;padding:12px;font:12px/1.5 ui-monospace,monospace}
+.git-changes-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:13px;font-size:13px}
+.git-changes-toolbar select,.git-changes-toolbar input{background:#151C24;border:1px solid #516071;color:#E6E9EE;padding:10px 12px;border-radius:7px;min-width:180px}
+.git-changes-toolbar input{flex:1;min-width:230px}
+.git-changes-summary{margin-top:15px;color:#C4CCD5;font:12px/1.6 ui-monospace,monospace;overflow-wrap:anywhere}
+.git-changes-files{display:flex;flex-direction:column;gap:6px;margin-top:11px}
+.git-changes-files label{display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid #444F5B;border-radius:7px;font:12px ui-monospace,monospace;overflow-wrap:anywhere}
+.git-changes-toolbar button:disabled{opacity:.5;cursor:not-allowed}
+#changes-status{margin-top:12px;min-height:20px}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -153,6 +161,27 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     <div class="panel">
       <h2>Skonfigurowane repozytoria</h2>
       <div class="repo-list" id="repo-list"><p class="repo-note">Odczytywanie konfiguracji…</p></div>
+    </div>
+    <div class="panel" id="git-changes-panel">
+      <h2>Zmiany Git</h2>
+      <p>Wybierz repozytorium i pliki. Commit pozostaje lokalny; push wymaga osobnego potwierdzenia.</p>
+      <div class="git-changes-toolbar">
+        <label for="changes-repository">Repozytorium</label>
+        <select id="changes-repository" aria-label="Wybierz repozytorium do operacji Git"></select>
+        <button type="button" class="repo-sync" id="changes-refresh">Sprawdź status</button>
+      </div>
+      <div class="git-changes-summary" id="changes-summary">Wybierz repozytorium, aby zobaczyć zmiany.</div>
+      <div id="changes-files" class="git-changes-files" aria-label="Pliki do commita"></div>
+      <div class="git-changes-toolbar">
+        <label for="changes-message">Opis commita</label>
+        <input id="changes-message" maxlength="200" placeholder="Np. Aktualizacja inventory serwerów" autocomplete="off"/>
+        <button type="button" class="repo-add" id="changes-commit" disabled>Utwórz commit</button>
+      </div>
+      <div class="git-changes-toolbar">
+        <button type="button" class="repo-sync" id="changes-push" disabled>Wyślij do Forgejo (push)</button>
+        <span class="repo-note">Push bez force; nigdy automatycznie</span>
+      </div>
+      <div id="changes-status" class="repo-note" role="status" aria-live="polite"></div>
     </div>
    </section>
   </main>
