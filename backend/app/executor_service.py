@@ -8,14 +8,12 @@ import argparse
 import json
 import os
 import re
-import signal
 import socket
 import socketserver
 import sqlite3
 import stat
 import struct
 import threading
-import time
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
@@ -185,6 +183,11 @@ def serve(socket_path, database, api_uid):
             raise ValueError("Use absolute non-symlink paths")
     if not sock.parent.is_dir() or not db.parent.is_dir():
         raise ValueError("Directories must be provisioned outside the application")
+    for directory in (sock.parent, db.parent):
+        info = directory.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+                or info.st_mode & 0o022):
+            raise ValueError("Executor directories must be owned by the service and not writable by others")
     if sock.exists() or sock.is_symlink():
         raise ValueError("Socket path exists; remove stale socket only after verifying ownership")
     if os.geteuid() == api_uid or os.geteuid() == 0:
