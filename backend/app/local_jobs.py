@@ -7,6 +7,7 @@ import fcntl
 import os
 import resource
 import selectors
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -116,8 +117,9 @@ def _run(job_id: int) -> None:
     outcome = "failed"
     code = None
     with tempfile.TemporaryDirectory(prefix="sakura-ansible-") as directory:
+        executable = shutil.which("ansible-playbook")
         command = [
-            "ansible-playbook", "--check", "-i", "localhost,", "-c", "local",
+            executable or "ansible-playbook", "--check", "-i", "localhost,", "-c", "local",
             "--limit", "localhost", str(PLAYBOOK),
         ]
         env = {
@@ -130,6 +132,8 @@ def _run(job_id: int) -> None:
             "PYTHONNOUSERSITE": "1",
         }
         try:
+            if executable is None:
+                raise FileNotFoundError("ansible-playbook")
             proc = subprocess.Popen(
                 command, cwd=directory, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
