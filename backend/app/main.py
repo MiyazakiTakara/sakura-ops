@@ -4,6 +4,7 @@ import html
 import json
 import os
 import secrets
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from argon2 import PasswordHasher
@@ -20,7 +21,17 @@ from .models import User
 secret_file = Path(__file__).resolve().parents[2] / ".secrets/session_key"
 secret = secret_file.read_text().strip()
 
-app = FastAPI(title="SakuraOps", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def app_lifespan(_app: FastAPI):
+    from .local_jobs import start_worker, stop_worker
+    start_worker()
+    try:
+        yield
+    finally:
+        stop_worker()
+
+
+app = FastAPI(title="SakuraOps", docs_url=None, redoc_url=None, lifespan=app_lifespan)
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 app.add_middleware(
@@ -173,10 +184,6 @@ from .inventory_preview import preview_inventory
 from .task_plans import task_plan
 from .local_jobs import (enqueue, list_jobs, get_job, cancel_job,
                          enabled as local_jobs_enabled, start_worker, stop_worker)
-
-
-app.add_event_handler("startup", start_worker)
-app.add_event_handler("shutdown", stop_worker)
 
 
 class ConsoleCommand(BaseModel):
