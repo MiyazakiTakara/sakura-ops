@@ -52,9 +52,16 @@ Type=simple
 User=sakuraops-exec
 Group=sakuraops-ipc
 WorkingDirectory=/opt/sakuraops-executor
+RuntimeDirectory=sakuraops-exec
+RuntimeDirectoryMode=0750
+StateDirectory=sakuraops-exec
+StateDirectoryMode=0700
 ExecStart=/usr/bin/python3 /opt/sakuraops-executor/executor_service.py --socket /run/sakuraops-exec/executor.sock --database /var/lib/sakuraops-exec/receipts.sqlite --api-uid API_UID
 NoNewPrivileges=yes
 PrivateTmp=yes
+PrivateNetwork=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/run/sakuraops-exec /var/lib/sakuraops-exec
@@ -68,7 +75,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-Zastąp `API_UID` numerycznym UID użytkownika serwisu WWW. Uwaga: `UMask=0077` daje bezpieczny plik bazy 0600, a serwer gniazda po utworzeniu jawnie ustawia uprawnienia 0660 (grupa). Oba katalogi i klucze pozostają poza repozytorium.
+Zastąp `API_UID` numerycznym UID użytkownika serwisu WWW. Dla usługi systemd `RuntimeDirectory` pozwala odtworzyć gniazdo po restarcie, bez automatycznego ufania pozostawionym plikom socketu. W przypadku ręcznego startu po awarii najpierw zweryfikuj, że poprzedni demon już nie działa; dopiero wtedy usuń osierocone gniazdo. Uwaga: `UMask=0077` daje bezpieczny plik bazy 0600, a serwer gniazda po utworzeniu jawnie ustawia uprawnienia 0660 (grupa). Oba katalogi i klucze pozostają poza repozytorium.
 
 Proces API uruchamiasz z:
 
