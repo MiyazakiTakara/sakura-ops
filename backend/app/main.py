@@ -222,6 +222,28 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
+    if action in ("ssh-diagnostic-create", "ssh-diagnostic-list",
+                  "ssh-diagnostic-show", "ssh-diagnostic-cancel"):
+        if user["role"] != "admin":
+            raise HTTPException(403, "Diagnostyka SSH wymaga roli administratora")
+        if action == "ssh-diagnostic-create":
+            job = ssh_diagnostics.enqueue(result["alias"])
+            result["output"] = "Zlecono diagnostykę SSH #" + str(job["id"]) + " (" + job["alias"] + ")"
+        elif action == "ssh-diagnostic-list":
+            jobs = ssh_diagnostics.list_jobs()
+            result["output"] = ("\n".join(
+                "#" + str(job["id"]) + "  " + job["alias"] + "  " + job["status"]
+                for job in jobs
+            ) or "Brak diagnostyk SSH.")
+        elif action == "ssh-diagnostic-show":
+            job = ssh_diagnostics.get_job(result["job_id"])
+            result["output"] = "SSH #" + str(job["id"]) + " — " + job["status"] + "\n" + job["log"]
+        else:
+            job = ssh_diagnostics.cancel_job(result["job_id"])
+            result["output"] = "SSH #" + str(job["id"]) + ": " + job["status"]
+        for field in ("action", "alias", "job_id"):
+            result.pop(field, None)
+        return result
     if action in ("local-test-create", "local-test-list", "local-test-show", "local-test-cancel"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zadania wymagają roli administratora")
