@@ -105,6 +105,13 @@ class Store:
                            (timestamp(), receipt_id))
             return self.get(receipt_id, db)
 
+    def process_pending(self):
+        """Complete queued *admission checks*; executes no payload."""
+        with self.lock, self.connect() as db:
+            items = db.execute("SELECT id FROM receipts WHERE state='queued' ORDER BY id LIMIT 10").fetchall()
+        for (receipt_id,) in items:
+            self.acknowledge(receipt_id)
+
     def recover(self):
         with self.lock, self.connect() as db:
             db.execute("UPDATE receipts SET state='interrupted', finished_at=? WHERE state='queued'",
@@ -183,9 +190,17 @@ def serve(socket_path, database, api_uid):
         store.recover()
         with Server(str(sock), Protocol(store, api_uid)) as server:
             os.chmod(sock, 0o660)
+            stop = threading.Event()
+            def drain():
+                while not stop.wait(0.5):
+                    store.process_pending()
+            worker = threading.Thread(target=drain, name="admission-only", daemon=True)
+            worker.start()
             try:
                 server.serve_forever(poll_interval=0.2)
             finally:
+                stop.set()
+                worker.join(timeout=2)
                 sock.unlink(missing_ok=True)
     finally:
         os.umask(old_umask)
