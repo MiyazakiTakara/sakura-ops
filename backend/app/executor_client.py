@@ -14,7 +14,7 @@ from fastapi import HTTPException
 
 from . import preflight
 
-MAX_RESPONSE = 4096
+MAX_RESPONSE = 8192
 
 
 def _path():
@@ -29,7 +29,8 @@ def _path():
         raise HTTPException(503, "Usługa wykonawcza nie działa") from exc
     if not stat.S_ISSOCK(info.st_mode) or not stat.S_ISDIR(parent.st_mode):
         raise HTTPException(503, "Nieprawidłowe gniazdo wykonawcy")
-    if info.st_mode & 0o007 or parent.st_mode & 0o002:
+    if (info.st_mode & 0o007 or parent.st_mode & 0o022 or
+            parent.st_uid != info.st_uid):
         raise HTTPException(503, "Gniazdo wykonawcy ma niezabezpieczone uprawnienia")
     if info.st_uid in (0, os.geteuid()):
         raise HTTPException(503, "Wykonawca musi działać jako inny użytkownik bez roota")
