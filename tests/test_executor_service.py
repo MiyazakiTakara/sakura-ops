@@ -72,6 +72,38 @@ def test_invalid_host_envelopes_rejected(store, hosts):
         store.submit("b" * 64, "a" * 40, hosts, 1000)
 
 
+def test_real_unix_socket_roundtrip(tmp_path, store):
+    """Exercise the actual Unix socket framing and peer credential check."""
+    import threading
+    path = str(tmp_path / "executor.sock")
+    with executor_service.Server(path, executor_service.Protocol(store, os.geteuid())) as server:
+        os.chmod(path, 0o660)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for request, expected in [
+                ({"op": "status"}, "admission_only"),
+                (envelope(), "queued"),
+            ]:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                    conn.settimeout(2)
+                    conn.connect(path)
+                    conn.sendall((json.dumps(request) + "\n").encode())
+                    answer = bytearray()
+                    while not answer.endswith(b"\n"):
+                        answer.extend(conn.recv(4096))
+                payload = json.loads(answer)
+                assert expected in str(payload)
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                conn.settimeout(2)
+                conn.connect(path)
+                conn.sendall(b'{"op":"exec","command":"id"}\n')
+                assert b"error" in conn.recv(4096)
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+
+
 def test_client_checks_approved_review_and_sha(monkeypatch):
     report = {"repository": "ansible", "inventory": "inventory/hosts.ini",
               "playbook": "playbooks/diag.yml", "group": "lab",
