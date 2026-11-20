@@ -2,8 +2,8 @@
 import shlex
 
 VERSION = "0.2.0-dev"
-ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push", "task plan")
-SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository", "show hosts", "show groups")
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push", "task plan", "task test", "task cancel")
+SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository", "show hosts", "show groups", "show jobs", "show job")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
@@ -31,6 +31,10 @@ COMMANDS = {
     "show hosts <repo> <inventory>": "Hosty ze statycznego inventory (bez wykonywania Ansible)",
     "show groups <repo> <inventory>": "Grupy i hosty ze statycznego inventory",
     "task plan <repo> <inventory> <playbook> <grupa>": "Podgląd celu zadania bez uruchamiania Ansible",
+    "task test": "Dodaj stały test localhost do kolejki (bez hostów z inventory)",
+    "task cancel <id>": "Anuluj lokalny test Ansible",
+    "show jobs": "Historia testów lokalnych",
+    "show job <id>": "Status i log testu lokalnego",
 }
 
 
@@ -79,6 +83,14 @@ def interpret(command: str, mode: str = "exec") -> dict:
 
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
+    if mode == "exec" and lowered == ["task", "test"]:
+        return result("", action="local-test-create")
+    if mode == "exec" and lowered == ["show", "jobs"]:
+        return result("", action="local-test-list")
+    if mode == "exec" and len(args) == 3 and lowered[:2] == ["show", "job"] and args[2].isdigit():
+        return result("", action="local-test-show", job_id=int(args[2]))
+    if mode == "exec" and len(args) == 3 and lowered[:2] == ["task", "cancel"] and args[2].isdigit():
+        return result("", action="local-test-cancel", job_id=int(args[2]))
     if name == "repository" and mode == "exec" and len(args) == 3 and lowered[1] == "status":
         return result("", action="repository-status", name=args[2])
     if name == "repository" and mode == "exec" and len(args) >= 6 and lowered[1] == "commit":
