@@ -29,7 +29,18 @@ sudo install -d -m 0700 -o sakuraops-exec -g sakuraops-ipc /var/lib/sakuraops-ex
 
 Administrator musi osobno przydzielić **wyłącznie procesowi API** dostęp do grupy `sakuraops-ipc` (np. przez `SupplementaryGroups=` w jego jednostce systemd), bez umieszczania prywatnych kluczy wykonawcy we współdzielonym katalogu. Nie zmieniaj uprawnień bazy danych API.
 
-Przykładowa usługa wydzielona (zapisz jako osobną jednostkę systemd, dostosuj `ExecStart` do realnego środowiska):
+Dla tej wersji wykonawca używa wyłącznie biblioteki standardowej Pythona.
+Nie należy uruchamiać go z katalogu domowego konta dewelopera ani kopiować
+całego repozytorium z sekretami. Wystarczy **jedno sprawdzone źródło**
+`backend/app/executor_service.py` w katalogu systemowym, należącym do root:
+
+```bash
+sudo install -d -m 0755 -o root -g root /opt/sakuraops-executor
+sudo install -m 0644 -o root -g root backend/app/executor_service.py /opt/sakuraops-executor/executor_service.py
+```
+
+Przykładowa usługa wydzielona (zapisz jako osobną jednostkę systemd,
+dostosuj Python, UID i polityki do środowiska):
 
 ```ini
 [Unit]
@@ -40,8 +51,8 @@ After=network.target
 Type=simple
 User=sakuraops-exec
 Group=sakuraops-ipc
-WorkingDirectory=/opt/sakuraops
-ExecStart=/opt/sakuraops/.venv/bin/python -m backend.app.executor_service --socket /run/sakuraops-exec/executor.sock --database /var/lib/sakuraops-exec/receipts.sqlite --api-uid API_UID
+WorkingDirectory=/opt/sakuraops-executor
+ExecStart=/usr/bin/python3 /opt/sakuraops-executor/executor_service.py --socket /run/sakuraops-exec/executor.sock --database /var/lib/sakuraops-exec/receipts.sqlite --api-uid API_UID
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
