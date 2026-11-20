@@ -1,0 +1,9 @@
+---
+- name: SakuraOps isolated local smoke test
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Verify SakuraOps local Ansible executor
+      ansible.builtin.debug:
+        msg: "SakuraOps LOCAL TEST — no remote hosts contacted"

@@ -451,7 +451,7 @@ function setView(view) {
     else item.removeAttribute("aria-current");
   }
   if (showServers) void loadServerRepositories();
-  if (showTasks) void loadTaskRepositories();
+  if (showTasks) { void loadTaskRepositories(); void refreshLocalJobs(); }
   if (showRepo) {
     void refreshRepositories();
     void loadChangeRepositories();
@@ -947,6 +947,110 @@ taskPreviewButton.addEventListener("click", async () => {
   }
 });
 
+const localJobStart = document.getElementById("local-test-start");
+const localJobCancel = document.getElementById("local-job-cancel");
+const localJobList = document.getElementById("local-jobs-list");
+const localJobStatus = document.getElementById("local-job-status");
+const localJobMode = document.getElementById("local-test-mode");
+const localJobLog = document.getElementById("local-job-log");
+const localJobTitle = document.getElementById("local-job-title");
+let localSelectedJob = null;
+let localJobEvents = null;
+
+function closeLocalJobEvents() {
+  localJobEvents?.close();
+  localJobEvents = null;
+}
+function renderLocalJob(job) {
+  localSelectedJob = job.id;
+  localJobTitle.textContent = "Test #" + job.id + " · " + job.status;
+  localJobLog.textContent = job.log || "Oczekiwanie na log…";
+  localJobLog.scrollTop = localJobLog.scrollHeight;
+  localJobCancel.disabled = !["queued", "running"].includes(job.status);
+  for (const button of localJobList.querySelectorAll("button")) {
+    if (Number(button.dataset.jobId) === job.id) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  }
+}
+async function selectLocalJob(id) {
+  closeLocalJobEvents();
+  localSelectedJob = id;
+  try {
+    const job = await request("/api/jobs/" + id);
+    if (localSelectedJob !== id) return;
+    renderLocalJob(job);
+    if (["success", "failed", "cancelled"].includes(job.status)) return;
+    if (typeof EventSource !== "undefined") {
+      const stream = new EventSource("/api/jobs/" + id + "/events");
+      localJobEvents = stream;
+      stream.addEventListener("job-update", event => {
+        if (localSelectedJob !== id) return;
+        const updated = JSON.parse(event.data);
+        renderLocalJob(updated);
+        if (["success", "failed", "cancelled"].includes(updated.status)) {
+          closeLocalJobEvents();
+          void refreshLocalJobs(false);
+        }
+      });
+      stream.addEventListener("error", () => {
+        closeLocalJobEvents();
+        localJobStatus.textContent = "Połączenie z logami przerwane. Odśwież historię.";
+      });
+    }
+  } catch (error) {
+    localJobStatus.textContent = error.message || "Nie udało się odczytać zadania.";
+  }
+}
+async function refreshLocalJobs(autoselect = true) {
+  try {
+    const data = await request("/api/jobs");
+    localJobStart.disabled = !data.enabled;
+    localJobMode.textContent = data.enabled
+      ? "Testy localhost włączone · bez dostępu do hostów z inventory"
+      : "Testy wyłączone w konfiguracji usługi";
+    localJobList.replaceChildren();
+    for (const job of data.jobs) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.jobId = String(job.id);
+      button.textContent = "#" + job.id + " · " + job.status;
+      button.addEventListener("click", () => { void selectLocalJob(job.id); });
+      localJobList.append(button);
+    }
+    if (autoselect && data.jobs.length && !localSelectedJob) {
+      await selectLocalJob(data.jobs[0].id);
+    }
+  } catch (error) {
+    localJobStatus.textContent = error.message || "Nie udało się odczytać historii.";
+  }
+}
+localJobStart.addEventListener("click", async () => {
+  if (!confirm("Uruchomić STAŁY test Ansible na localhost w trybie --check? Nie użyje on inventory z Forgejo.")) return;
+  localJobStart.disabled = true;
+  localJobStatus.textContent = "Dodawanie testu do kolejki…";
+  try {
+    const job = await request("/api/jobs/local-test", { method: "POST" });
+    localJobStatus.textContent = "Dodano test #" + job.id;
+    await refreshLocalJobs(false);
+    await selectLocalJob(job.id);
+  } catch (error) {
+    localJobStatus.textContent = error.message || "Nie udało się dodać testu.";
+  } finally {
+    if (localJobMode.textContent.startsWith("Testy localhost włączone")) localJobStart.disabled = false;
+  }
+});
+document.getElementById("local-jobs-refresh").addEventListener("click", () => { void refreshLocalJobs(false); if (localSelectedJob) void selectLocalJob(localSelectedJob); });
+localJobCancel.addEventListener("click", async () => {
+  if (!localSelectedJob || !confirm("Zatrzymać test #" + localSelectedJob + "?")) return;
+  try {
+    await request("/api/jobs/" + localSelectedJob + "/cancel", { method: "POST" });
+    localJobStatus.textContent = "Wysłano żądanie zatrzymania.";
+    await selectLocalJob(localSelectedJob);
+    await refreshLocalJobs(false);
+  } catch (error) {
+    localJobStatus.textContent = error.message || "Nie udało się zatrzymać testu.";
+  }
+});
 const fileRepoSelect = document.getElementById("files-repository");
 const gitFilesList = document.getElementById("git-files-list");
 const gitFileMount = document.getElementById("git-file-editor");

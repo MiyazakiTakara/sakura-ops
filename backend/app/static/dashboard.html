@@ -105,6 +105,13 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 #task-plan-status{margin-top:13px;min-height:20px}
 #task-plan-summary{margin-bottom:13px}
 @media(max-width:600px){.task-plan-grid{grid-template-columns:1fr;gap:7px}.task-plan-grid label:not(:first-child){margin-top:8px}}
+.local-job-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.local-job-controls button:disabled{opacity:.5;cursor:not-allowed}
+.local-jobs-list{display:flex;flex-wrap:wrap;gap:8px;margin:13px 0}
+.local-jobs-list button{padding:9px 11px;background:#1a222b;color:#E6E9EE;border:1px solid #4a5665;border-radius:7px;cursor:pointer}
+.local-jobs-list button[aria-current=true]{border-color:#D9A0B7;color:#F5CDE0}
+.local-job-detail{margin-top:14px}
+#local-job-log{background:#121a21;color:#C9D4DC;border:1px solid #465360;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:330px;min-height:140px;overflow:auto;padding:12px;font:12px/1.6 ui-monospace,monospace}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -138,10 +145,10 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Wpisz ? lub help. Polecenie edit notatki.md otwiera edytor bezpiecznych plików roboczych. Zarządzanie serwerami i automatyzacje pojawią się później.</p></section>
    </div>
    <section id="tasks-view" hidden aria-label="Planowanie zadań Ansible">
-    <div class="heading"><h1>Zadania</h1><span class="sub">Planowanie bez wykonania</span></div>
+    <div class="heading"><h1>Zadania</h1><span class="sub">Planowanie i testy lokalne</span></div>
     <div class="panel">
       <h2>Podgląd zadania</h2>
-      <p>Wybierz repozytorium, inventory, playbook i grupę docelową. Nie uruchomimy Ansible ani nie połączymy się z hostami.</p>
+      <p>Wybierz repozytorium, inventory, playbook i grupę docelową. Ten podgląd nie uruchomi playbooka ani nie połączy się z hostami.</p>
       <div class="task-plan-grid">
         <label for="task-repository">Repozytorium</label><select id="task-repository"></select>
         <label for="task-inventory">Inventory</label><select id="task-inventory"></select>
@@ -156,7 +163,25 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
       <div id="task-plan-summary" class="repo-note"></div>
       <h2>Hosty docelowe</h2>
       <div id="task-plan-hosts" class="server-hosts"></div>
-      <p>To podgląd statyczny, nie wynik rzeczywistej ewaluacji Ansible. Uruchamianie zadań nie jest jeszcze dostępne.</p>
+      <p>To podgląd statyczny, nie wynik rzeczywistej ewaluacji Ansible. Wykonywanie playbooków z repozytoriów pozostaje wyłączone.</p>
+    </div>
+    <div class="panel" id="local-test-panel">
+      <h2>Wykonawca — test lokalny</h2>
+      <p>Stały playbook SakuraOps uruchamiany tylko na <code>localhost</code> w trybie <code>--check</code>. Nie korzysta z inventory ani playbooków z Forgejo.</p>
+      <div class="local-job-controls">
+        <button type="button" class="repo-sync" id="local-test-start" disabled>Uruchom test localhost</button>
+        <button type="button" class="repo-sync" id="local-jobs-refresh">Odśwież historię</button>
+        <span id="local-test-mode" class="repo-note">Sprawdzanie dostępności…</span>
+      </div>
+      <div id="local-job-status" class="repo-note" role="status" aria-live="polite"></div>
+      <div id="local-jobs-list" class="local-jobs-list"></div>
+      <div class="local-job-detail">
+        <div class="local-job-controls">
+          <strong id="local-job-title">Wybierz test z historii</strong>
+          <button type="button" id="local-job-cancel" class="repo-delete" disabled>Zatrzymaj</button>
+        </div>
+        <pre id="local-job-log" role="log" aria-label="Log lokalnego zadania Ansible">Brak wybranego zadania.</pre>
+      </div>
     </div>
    </section>
    <section id="servers-view" hidden aria-label="Hosty Ansible">

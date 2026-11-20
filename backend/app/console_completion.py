@@ -14,11 +14,13 @@ GRAMMAR_EXEC = (
     ("show", "repositories"),
     ("show", "hosts", "{repo}", "{inventory}"),
     ("show", "groups", "{repo}", "{inventory}"),
+    ("show", "jobs"), ("show", "job", "{jobid}"),
     ("show", "repository", "{repo}", "inventory"),
     ("show", "repository", "{repo}", "playbooks"),
     ("show", "repository", "{repo}", "file", "{allfiles}"),
     ("show", "repository", "{repo}", "diff", "{allfiles}"),
     ("task", "plan", "{repo}", "{inventory}", "{playbook}", "{group}"),
+    ("task", "test"), ("task", "cancel", "{jobid}"),
     ("repository", "sync", "{repo}"),
     ("repository", "status", "{repo}"),
     ("repository", "edit", "{repo}", "{allfiles}"),
@@ -44,6 +46,9 @@ def _options(token: str, chosen: list[str], repositories: list[str]) -> list[str
         return [token]
     if token == "{repo}":
         return repositories
+    if token == "{jobid}":
+        from .local_jobs import list_jobs
+        return [str(row["id"]) for row in list_jobs()[:20]]
     if token == "{workspace}":
         from .workspace import list_files
         return list_files()
