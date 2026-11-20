@@ -50,6 +50,15 @@ SQLite, pokazuje historię oraz logi na żywo i umożliwia anulowanie.
 Wynik `success` oznacza, że połączenie i stałe polecenie `true`
 zakończyły się kodem 0.
 
+Diagnostyka dostępna jest też w konsoli `skr`:
+```text
+SakuraOps# ssh diagnose lab
+SakuraOps# show ssh diagnostics
+SakuraOps# show ssh job 1
+SakuraOps# ssh cancel 1
+```
+Tab podpowiada dozwolone aliasy hostów i identyfikatory zadań.
+
 Kolejka ogranicza się do 10 oczekujących/aktywnych wpisów.
 Proces działa bez shell, bez agent forwarding, z `BatchMode=yes`,
 `StrictHostKeyChecking=yes`, `UserKnownHostsFile` i jawnym kluczem.
