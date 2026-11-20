@@ -571,9 +571,9 @@ async def ssh_diagnostics_events(request: Request, job_id: int):
             signature = (row["status"], row["log"], row["cancel_requested"])
             if signature != previous:
                 previous = signature
-                yield "event: job-update\\ndata: " + json.dumps(
+                yield "event: job-update\ndata: " + json.dumps(
                     row, ensure_ascii=False
-                ) + "\\n\\n"
+                ) + "\n\n"
             if row["status"] in ("success", "failed", "cancelled"):
                 return
             await asyncio.sleep(0.5)
