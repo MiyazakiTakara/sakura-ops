@@ -17,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .database import SessionLocal
 from .models import User
+from . import ssh_diagnostics
 
 secret_file = Path(__file__).resolve().parents[2] / ".secrets/session_key"
 secret = secret_file.read_text().strip()
@@ -25,9 +26,11 @@ secret = secret_file.read_text().strip()
 async def app_lifespan(_app: FastAPI):
     from .local_jobs import start_worker, stop_worker
     start_worker()
+    ssh_diagnostics.start_worker()
     try:
         yield
     finally:
+        ssh_diagnostics.stop_worker()
         stop_worker()
 
 
@@ -219,6 +222,28 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
+    if action in ("ssh-diagnostic-create", "ssh-diagnostic-list",
+                  "ssh-diagnostic-show", "ssh-diagnostic-cancel"):
+        if user["role"] != "admin":
+            raise HTTPException(403, "Diagnostyka SSH wymaga roli administratora")
+        if action == "ssh-diagnostic-create":
+            job = ssh_diagnostics.enqueue(result["alias"])
+            result["output"] = "Zlecono diagnostykę SSH #" + str(job["id"]) + " (" + job["alias"] + ")"
+        elif action == "ssh-diagnostic-list":
+            jobs = ssh_diagnostics.list_jobs()
+            result["output"] = ("\n".join(
+                "#" + str(job["id"]) + "  " + job["alias"] + "  " + job["status"]
+                for job in jobs
+            ) or "Brak diagnostyk SSH.")
+        elif action == "ssh-diagnostic-show":
+            job = ssh_diagnostics.get_job(result["job_id"])
+            result["output"] = "SSH #" + str(job["id"]) + " — " + job["status"] + "\n" + job["log"]
+        else:
+            job = ssh_diagnostics.cancel_job(result["job_id"])
+            result["output"] = "SSH #" + str(job["id"]) + ": " + job["status"]
+        for field in ("action", "alias", "job_id"):
+            result.pop(field, None)
+        return result
     if action in ("local-test-create", "local-test-list", "local-test-show", "local-test-cancel"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zadania wymagają roli administratora")
@@ -513,6 +538,69 @@ async def jobs_events(request: Request, job_id: int):
         updates(), media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+class SSHDiagnosticRequest(BaseModel):
+    alias: str = Field(min_length=2, max_length=40)
+
+
+@app.get("/api/ssh-diagnostics/config")
+def ssh_diagnostics_config(request: Request):
+    require_console_session(request, edit=True)
+    return ssh_diagnostics.configuration()
+
+
+@app.get("/api/ssh-diagnostics/jobs")
+def ssh_diagnostics_jobs(request: Request):
+    require_console_session(request, edit=True)
+    return {"jobs": ssh_diagnostics.list_jobs()}
+
+
+@app.post("/api/ssh-diagnostics/jobs", status_code=201)
+def ssh_diagnostics_enqueue(request: Request, body: SSHDiagnosticRequest):
+    require_console_session(request, edit=True)
+    return ssh_diagnostics.enqueue(body.alias)
+
+
+@app.get("/api/ssh-diagnostics/jobs/{job_id}")
+def ssh_diagnostics_get(request: Request, job_id: int):
+    require_console_session(request, edit=True)
+    return ssh_diagnostics.get_job(job_id)
+
+
+@app.post("/api/ssh-diagnostics/jobs/{job_id}/cancel")
+def ssh_diagnostics_cancel(request: Request, job_id: int):
+    require_console_session(request, edit=True)
+    return ssh_diagnostics.cancel_job(job_id)
+
+
+@app.get("/api/ssh-diagnostics/jobs/{job_id}/events")
+async def ssh_diagnostics_events(request: Request, job_id: int):
+    user = current_user(request)
+    if user is None:
+        raise HTTPException(401, "Wymagane logowanie")
+    if user["role"] != "admin":
+        raise HTTPException(403, "Wymagana rola administratora")
+    ssh_diagnostics.get_job(job_id)
+
+    async def updates():
+        previous = None
+        while not await request.is_disconnected():
+            account = await asyncio.to_thread(current_user, request)
+            if account is None or account["role"] != "admin":
+                return
+            row = await asyncio.to_thread(ssh_diagnostics.get_job, job_id)
+            signature = (row["status"], row["log"], row["cancel_requested"])
+            if signature != previous:
+                previous = signature
+                yield "event: job-update\ndata: " + json.dumps(
+                    row, ensure_ascii=False
+                ) + "\n\n"
+            if row["status"] in ("success", "failed", "cancelled"):
+                return
+            await asyncio.sleep(0.5)
+    return StreamingResponse(updates(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
 
 @app.delete("/api/repositories/{name}")

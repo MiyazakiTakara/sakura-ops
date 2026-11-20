@@ -21,6 +21,8 @@ GRAMMAR_EXEC = (
     ("show", "repository", "{repo}", "diff", "{allfiles}"),
     ("task", "plan", "{repo}", "{inventory}", "{playbook}", "{group}"),
     ("task", "test"), ("task", "cancel", "{jobid}"),
+    ("ssh", "diagnose", "{sshtarget}"), ("ssh", "cancel", "{sshjobid}"),
+    ("show", "ssh", "diagnostics"), ("show", "ssh", "job", "{sshjobid}"),
     ("repository", "sync", "{repo}"),
     ("repository", "status", "{repo}"),
     ("repository", "edit", "{repo}", "{allfiles}"),
@@ -46,6 +48,15 @@ def _options(token: str, chosen: list[str], repositories: list[str]) -> list[str
         return [token]
     if token == "{repo}":
         return repositories
+    if token == "{sshtarget}":
+        from .ssh_diagnostics import configuration
+        try:
+            return [row["alias"] for row in configuration()["targets"]]
+        except HTTPException:
+            return []
+    if token == "{sshjobid}":
+        from .ssh_diagnostics import list_jobs as list_ssh_jobs
+        return [str(row["id"]) for row in list_ssh_jobs()[:20]]
     if token == "{jobid}":
         from .local_jobs import list_jobs
         return [str(row["id"]) for row in list_jobs()[:20]]

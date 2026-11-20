@@ -451,7 +451,7 @@ function setView(view) {
     else item.removeAttribute("aria-current");
   }
   if (showServers) void loadServerRepositories();
-  if (showTasks) { void loadTaskRepositories(); void refreshLocalJobs(); }
+  if (showTasks) { void loadTaskRepositories(); void refreshLocalJobs(); void refreshSSHDiagnostics(); }
   if (showRepo) {
     void refreshRepositories();
     void loadChangeRepositories();
@@ -1051,6 +1051,131 @@ localJobCancel.addEventListener("click", async () => {
     localJobStatus.textContent = error.message || "Nie udało się zatrzymać testu.";
   }
 });
+const sshTarget = document.getElementById("ssh-diagnostic-target");
+const sshStart = document.getElementById("ssh-diagnostic-start");
+const sshStop = document.getElementById("ssh-diagnostic-stop");
+const sshConfigStatus = document.getElementById("ssh-diagnostic-config-status");
+const sshHistory = document.getElementById("ssh-diagnostic-history");
+const sshLog = document.getElementById("ssh-diagnostic-log");
+const sshTitle = document.getElementById("ssh-diagnostic-title");
+let sshSelectedJob = null;
+let sshEvents = null;
+let sshReady = false;
+
+function closeSSHEvents() {
+  sshEvents?.close();
+  sshEvents = null;
+}
+function renderSSHJob(job) {
+  sshSelectedJob = job.id;
+  sshTitle.textContent = "SSH #" + job.id + " · " + job.alias + " · " + job.status;
+  sshLog.textContent = job.log || "Oczekiwanie na wynik…";
+  sshLog.scrollTop = sshLog.scrollHeight;
+  sshStop.disabled = !["queued", "running"].includes(job.status);
+  for (const element of sshHistory.querySelectorAll("button")) {
+    if (Number(element.dataset.jobId) === job.id) element.setAttribute("aria-current", "true");
+    else element.removeAttribute("aria-current");
+  }
+}
+async function selectSSHJob(id) {
+  closeSSHEvents();
+  sshSelectedJob = id;
+  try {
+    const job = await request("/api/ssh-diagnostics/jobs/" + id);
+    if (sshSelectedJob !== id) return;
+    renderSSHJob(job);
+    if (["success", "failed", "cancelled"].includes(job.status)) return;
+    if (typeof EventSource !== "undefined") {
+      const stream = new EventSource("/api/ssh-diagnostics/jobs/" + id + "/events");
+      sshEvents = stream;
+      stream.addEventListener("job-update", event => {
+        if (sshSelectedJob !== id) return;
+        const updated = JSON.parse(event.data);
+        renderSSHJob(updated);
+        if (["success", "failed", "cancelled"].includes(updated.status)) {
+          closeSSHEvents();
+          void refreshSSHDiagnostics(false);
+        }
+      });
+      stream.addEventListener("error", () => {
+        closeSSHEvents();
+        sshConfigStatus.textContent = "Utracono strumień logów SSH. Odśwież historię.";
+      });
+    }
+  } catch (error) {
+    sshConfigStatus.textContent = error.message || "Nie udało się odczytać diagnostyki.";
+  }
+}
+async function refreshSSHDiagnostics(autoselect = true) {
+  try {
+    const [config, history] = await Promise.all([
+      request("/api/ssh-diagnostics/config"),
+      request("/api/ssh-diagnostics/jobs"),
+    ]);
+    sshReady = config.enabled;
+    sshStart.disabled = !sshReady;
+    const current = sshTarget.value;
+    sshTarget.replaceChildren();
+    for (const item of config.targets) {
+      const option = document.createElement("option");
+      option.value = item.alias;
+      option.textContent = item.alias + " · " + item.address;
+      sshTarget.append(option);
+    }
+    if (config.targets.some(item => item.alias === current)) sshTarget.value = current;
+    sshStart.disabled = !sshReady || !sshTarget.value;
+    sshConfigStatus.textContent = sshReady
+      ? "Diagnostyka gotowa. Wykonuje wyłącznie SSH 'true' z przypiętym kluczem hosta."
+      : "Diagnostyka wyłączona. Skonfiguruj allowlistę, klucz SSH i known_hosts na serwerze SakuraOps.";
+    sshHistory.replaceChildren();
+    for (const job of history.jobs) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.jobId = String(job.id);
+      button.textContent = "#" + job.id + " · " + job.alias + " · " + job.status;
+      button.addEventListener("click", () => { void selectSSHJob(job.id); });
+      sshHistory.append(button);
+    }
+    if (autoselect && !sshSelectedJob && history.jobs.length) await selectSSHJob(history.jobs[0].id);
+  } catch (error) {
+    sshStart.disabled = true;
+    sshConfigStatus.textContent = error.message || "Nie udało się odczytać diagnostyki SSH.";
+  }
+}
+sshStart.addEventListener("click", async () => {
+  const alias = sshTarget.value;
+  if (!sshReady || !alias) return;
+  if (!confirm("Wykonać połączenie SSH do zatwierdzonego hosta " + alias
+    + " jako sakuraops-diag i uruchomić jedynie 'true'? Bez sudo i bez playbooka.")) return;
+  sshStart.disabled = true;
+  try {
+    const job = await request("/api/ssh-diagnostics/jobs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alias }),
+    });
+    await refreshSSHDiagnostics(false);
+    await selectSSHJob(job.id);
+  } catch (error) {
+    sshConfigStatus.textContent = error.message || "Nie udało się zlecić diagnostyki.";
+  } finally {
+    sshStart.disabled = !sshReady || !sshTarget.value;
+  }
+});
+sshStop.addEventListener("click", async () => {
+  if (!sshSelectedJob || !confirm("Zatrzymać diagnostykę SSH #" + sshSelectedJob + "?")) return;
+  try {
+    await request("/api/ssh-diagnostics/jobs/" + sshSelectedJob + "/cancel", { method: "POST" });
+    await selectSSHJob(sshSelectedJob);
+    await refreshSSHDiagnostics(false);
+  } catch (error) {
+    sshConfigStatus.textContent = error.message || "Nie udało się zatrzymać diagnostyki.";
+  }
+});
+document.getElementById("ssh-diagnostic-refresh").addEventListener("click", () => {
+  void refreshSSHDiagnostics(false);
+  if (sshSelectedJob) void selectSSHJob(sshSelectedJob);
+});
+
 const fileRepoSelect = document.getElementById("files-repository");
 const gitFilesList = document.getElementById("git-files-list");
 const gitFileMount = document.getElementById("git-file-editor");
