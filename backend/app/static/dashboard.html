@@ -116,6 +116,10 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 #ssh-diagnostic-start:disabled,#ssh-diagnostic-stop:disabled{opacity:.5;cursor:not-allowed}
 #ssh-diagnostic-config-status{margin:10px 0}
 #ssh-diagnostic-target{min-width:190px;max-width:100%}
+#ansible-ping-log{background:#121a21;color:#c9d4dc;border:1px solid #465360;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;min-height:100px;overflow:auto;padding:12px;font:12px/1.6 ui-monospace,monospace}
+#ansible-ping-target{min-width:190px;max-width:100%}
+#ansible-ping-status{margin:10px 0}
+#ansible-ping-start:disabled,#ansible-ping-stop:disabled{opacity:.5;cursor:not-allowed}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -203,6 +207,23 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
         <button class="repo-delete" id="ssh-diagnostic-stop" type="button" disabled>Zatrzymaj</button>
       </div>
       <pre id="ssh-diagnostic-log" role="log" aria-label="Log diagnostyki SSH">Brak wybranego zadania.</pre>
+    </div>
+    <div class="panel" id="ansible-ping-panel">
+      <h2>Diagnostyka Ansible — ping</h2>
+      <p>Stały moduł <code>ansible.builtin.ping</code> na zatwierdzonym adresie IP. Wymaga osobnego konta <code>sakuraops-ping</code> bez sudo, klucza SSH i przypiętego klucza hosta. Uruchamia tymczasowy kod Pythona na wybranym hoście; nie jest testem ICMP.</p>
+      <div class="files-toolbar">
+        <label for="ansible-ping-target">Host docelowy</label>
+        <select id="ansible-ping-target" aria-label="Zatwierdzony host Ansible"></select>
+        <button type="button" class="repo-sync" id="ansible-ping-start" disabled>Sprawdź Ansible ping</button>
+        <button type="button" class="repo-sync" id="ansible-ping-refresh">Odśwież</button>
+      </div>
+      <div id="ansible-ping-status" class="repo-note" role="status" aria-live="polite">Sprawdzanie konfiguracji…</div>
+      <div id="ansible-ping-history" class="local-jobs-list"></div>
+      <div class="local-job-controls">
+        <strong id="ansible-ping-title">Wybierz test</strong>
+        <button type="button" class="repo-delete" id="ansible-ping-stop" disabled>Zatrzymaj</button>
+      </div>
+      <pre id="ansible-ping-log" role="log" aria-label="Log Ansible ping">Brak wybranego testu.</pre>
     </div>
    </section>
    <section id="servers-view" hidden aria-label="Hosty Ansible">

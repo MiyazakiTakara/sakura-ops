@@ -451,7 +451,7 @@ function setView(view) {
     else item.removeAttribute("aria-current");
   }
   if (showServers) void loadServerRepositories();
-  if (showTasks) { void loadTaskRepositories(); void refreshLocalJobs(); void refreshSSHDiagnostics(); }
+  if (showTasks) { void loadTaskRepositories(); void refreshLocalJobs(); void refreshSSHDiagnostics(); void refreshAnsiblePing(); }
   if (showRepo) {
     void refreshRepositories();
     void loadChangeRepositories();
@@ -1174,6 +1174,129 @@ sshStop.addEventListener("click", async () => {
 document.getElementById("ssh-diagnostic-refresh").addEventListener("click", () => {
   void refreshSSHDiagnostics(false);
   if (sshSelectedJob) void selectSSHJob(sshSelectedJob);
+});
+
+const pingTarget = document.getElementById("ansible-ping-target");
+const pingStart = document.getElementById("ansible-ping-start");
+const pingStop = document.getElementById("ansible-ping-stop");
+const pingStatus = document.getElementById("ansible-ping-status");
+const pingHistory = document.getElementById("ansible-ping-history");
+const pingLog = document.getElementById("ansible-ping-log");
+const pingTitle = document.getElementById("ansible-ping-title");
+let pingSelected = null;
+let pingEvents = null;
+let pingEnabled = false;
+
+function stopPingStream() {
+  pingEvents?.close();
+  pingEvents = null;
+}
+function renderPing(job) {
+  pingSelected = job.id;
+  pingTitle.textContent = "Ansible #" + job.id + " · " + job.alias + " · " + job.status;
+  pingLog.textContent = job.log || "Oczekiwanie na log…";
+  pingLog.scrollTop = pingLog.scrollHeight;
+  pingStop.disabled = !["queued", "running"].includes(job.status);
+  for (const button of pingHistory.querySelectorAll("button")) {
+    if (Number(button.dataset.jobId) === job.id) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  }
+}
+async function selectPing(id) {
+  stopPingStream();
+  pingSelected = id;
+  try {
+    const job = await request("/api/ansible-ping/jobs/" + id);
+    if (pingSelected !== id) return;
+    renderPing(job);
+    if (["success", "failed", "cancelled"].includes(job.status)) return;
+    if (typeof EventSource !== "undefined") {
+      const stream = new EventSource("/api/ansible-ping/jobs/" + id + "/events");
+      pingEvents = stream;
+      stream.addEventListener("job-update", event => {
+        if (pingSelected !== id) return;
+        const updated = JSON.parse(event.data);
+        renderPing(updated);
+        if (["success", "failed", "cancelled"].includes(updated.status)) {
+          stopPingStream();
+          void refreshAnsiblePing(false);
+        }
+      });
+      stream.addEventListener("error", () => {
+        stopPingStream();
+        pingStatus.textContent = "Utracono połączenie z logami. Odśwież historię.";
+      });
+    }
+  } catch (error) {
+    pingStatus.textContent = error.message || "Nie można odczytać testu.";
+  }
+}
+async function refreshAnsiblePing(autoselect = true) {
+  try {
+    const [config, result] = await Promise.all([
+      request("/api/ansible-ping/config"), request("/api/ansible-ping/jobs"),
+    ]);
+    pingEnabled = config.enabled;
+    const existing = pingTarget.value;
+    pingTarget.replaceChildren();
+    for (const target of config.targets) {
+      const option = document.createElement("option");
+      option.value = target.alias;
+      option.textContent = target.alias + " · " + target.address;
+      pingTarget.append(option);
+    }
+    if (config.targets.some(x => x.alias === existing)) pingTarget.value = existing;
+    pingStart.disabled = !pingEnabled || !pingTarget.value;
+    pingStatus.textContent = pingEnabled
+      ? "Gotowe. Dostępny jest wyłącznie ansible.builtin.ping bez sudo."
+      : "Wyłączone. Skonfiguruj osobny klucz dla konta sakuraops-ping oraz listę hostów.";
+    pingHistory.replaceChildren();
+    for (const job of result.jobs) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.jobId = String(job.id);
+      button.textContent = "#" + job.id + " · " + job.alias + " · " + job.status;
+      button.addEventListener("click", () => { void selectPing(job.id); });
+      pingHistory.append(button);
+    }
+    if (autoselect && !pingSelected && result.jobs.length) await selectPing(result.jobs[0].id);
+  } catch (error) {
+    pingStart.disabled = true;
+    pingStatus.textContent = error.message || "Nie udało się odczytać diagnostyki Ansible.";
+  }
+}
+pingStart.addEventListener("click", async () => {
+  const alias = pingTarget.value;
+  if (!pingEnabled || !alias) return;
+  if (!confirm("Uruchomić ansible.builtin.ping na zatwierdzonym hoście "
+    + alias + " jako sakuraops-ping? Wykona to tymczasowy kod Pythona bez sudo.")) return;
+  pingStart.disabled = true;
+  try {
+    const job = await request("/api/ansible-ping/jobs", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({alias}),
+    });
+    await refreshAnsiblePing(false);
+    await selectPing(job.id);
+  } catch (error) {
+    pingStatus.textContent = error.message || "Nie udało się uruchomić diagnostyki.";
+  } finally {
+    pingStart.disabled = !pingEnabled || !pingTarget.value;
+  }
+});
+pingStop.addEventListener("click", async () => {
+  if (!pingSelected || !confirm("Zatrzymać test Ansible #" + pingSelected + "?")) return;
+  try {
+    await request("/api/ansible-ping/jobs/" + pingSelected + "/cancel", {method: "POST"});
+    await selectPing(pingSelected);
+    await refreshAnsiblePing(false);
+  } catch (error) {
+    pingStatus.textContent = error.message || "Nie udało się zatrzymać testu.";
+  }
+});
+document.getElementById("ansible-ping-refresh").addEventListener("click", () => {
+  void refreshAnsiblePing(false);
+  if (pingSelected) void selectPing(pingSelected);
 });
 
 const fileRepoSelect = document.getElementById("files-repository");
