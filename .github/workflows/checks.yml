@@ -23,7 +23,7 @@ jobs:
       - name: Check Python syntax and tests
         run: |
           python -m compileall -q backend/app backend/create_admin.py
-          python -m pytest -q tests/test_ui_shell.py tests/test_editor_inventory.py tests/test_repository_settings.py tests/test_git_changes.py tests/test_inventory_preview.py tests/test_context_completion.py tests/test_local_jobs.py tests/test_ssh_diagnostics.py
+          python -m pytest -q tests/test_ui_shell.py tests/test_editor_inventory.py tests/test_repository_settings.py tests/test_git_changes.py tests/test_inventory_preview.py tests/test_context_completion.py tests/test_local_jobs.py tests/test_ssh_diagnostics.py tests/test_ansible_ping.py
       - name: Check terminal editing and completion
         working-directory: frontend
         run: node --test tests/completion.test.js tests/line_editor.test.js
