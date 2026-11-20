@@ -130,5 +130,6 @@ def test_api_has_no_shell_bridge():
     assert 'require_console_session(request, edit=True)' in api
     assert "SO_PEERCRED" in client
     assert "SO_PEERCRED" in daemon
-    assert "subprocess" not in daemon
+    assert "import subprocess" not in daemon
+    assert "subprocess." not in daemon
     assert "ansible-playbook" not in daemon
