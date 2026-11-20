@@ -53,7 +53,7 @@ SakuraOps# task cancel 1
   Limit 10 zadań oczekujących/uruchomionych.
 - Stan zadania, ograniczony log do 64 KiB i status anulowania zapisane w SQLite.
 - Logi dostarczane przez uwierzytelnione SSE (co ok. 0,5 sekundy).
-- Subprocess bez powłoki, stdin zamknięte, pusta konfiguracja Ansible,
+- Subprocess bez powłoki, stdin zamknięte, minimalny prywatny `ansible.cfg` (0600) tworzony na czas testu,
   osobny tymczasowy HOME/cwd, ograniczenie CPU, pamięci i pliku wyjściowego.
 - Limit czasu 60 sekund; zatrzymanie całej grupy procesu przy anulowaniu.
 - Restart procesu oznacza porzucone zadania jako `failed`.
