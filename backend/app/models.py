@@ -30,3 +30,17 @@ class GitSyncState(Base):
     repository_name: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
     synced_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class LocalTestJob(Base):
+    """A job has no inventory, playbook path or remote-target fields by design."""
+    __tablename__ = "local_test_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+    started_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    finished_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    log: Mapped[str] = mapped_column(String(65536), nullable=False, default="")
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
