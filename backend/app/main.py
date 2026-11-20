@@ -220,7 +220,7 @@ def console_execute(request: Request, body: ConsoleCommand):
             result["output"] = "Test localhost dodany do kolejki: #" + str(row["id"])
         elif action == "local-test-list":
             rows = list_jobs()
-            result["output"] = ("\\n".join(
+            result["output"] = ("\n".join(
                 "#" + str(row["id"]) + "  " + row["status"] + "  " + row["created_at"]
                 for row in rows
             ) or "Brak zadań.")
@@ -489,6 +489,9 @@ async def jobs_events(request: Request, job_id: int):
     async def updates():
         previous = None
         while not await request.is_disconnected():
+            account = await asyncio.to_thread(current_user, request)
+            if account is None or account["role"] != "admin":
+                return
             row = await asyncio.to_thread(get_job, job_id)
             signature = (row["status"], row["log"], row["cancel_requested"])
             if signature != previous:
