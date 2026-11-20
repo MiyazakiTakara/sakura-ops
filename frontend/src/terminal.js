@@ -451,7 +451,7 @@ function setView(view) {
     else item.removeAttribute("aria-current");
   }
   if (showServers) void loadServerRepositories();
-  if (showTasks) { void loadTaskRepositories(); void refreshLocalJobs(); void refreshSSHDiagnostics(); void refreshAnsiblePing(); }
+  if (showTasks) { void loadPreflightHistory(); void loadTaskRepositories(); void refreshLocalJobs(); void refreshSSHDiagnostics(); void refreshAnsiblePing(); }
   if (showRepo) {
     void refreshRepositories();
     void loadChangeRepositories();
@@ -839,6 +839,7 @@ let taskRequestId = 0;
 
 function clearTaskPreview() {
   taskOutput.hidden = true;
+  if (typeof invalidatePreflight === "function") invalidatePreflight();
   taskPreviewButton.disabled = !taskRepo.value || !taskInventory.value
     || !taskPlaybook.value || !taskGroup.value;
 }
@@ -946,6 +947,115 @@ taskPreviewButton.addEventListener("click", async () => {
     }
   }
 });
+
+const preflightMode = document.getElementById("preflight-mode");
+const preflightRun = document.getElementById("preflight-run");
+const preflightApprove = document.getElementById("preflight-approve");
+const preflightRefresh = document.getElementById("preflight-refresh");
+const preflightStatus = document.getElementById("preflight-status");
+const preflightHistory = document.getElementById("preflight-history");
+const preflightResult = document.getElementById("preflight-result");
+const preflightTitle = document.getElementById("preflight-title");
+const preflightDetails = document.getElementById("preflight-details");
+let preflightCurrent = null;
+
+function invalidatePreflight() {
+  preflightCurrent = null;
+  preflightResult.hidden = true;
+  preflightApprove.disabled = true;
+  preflightRun.disabled = !taskRepo.value || !taskInventory.value ||
+    !taskPlaybook.value || !taskGroup.value;
+}
+function renderPreflight(item) {
+  preflightCurrent = item;
+  const report = item.report;
+  preflightTitle.textContent = "Preflight #" + item.id + " · " + item.state;
+  preflightDetails.textContent = [
+    "Repozytorium: " + report.repository,
+    "Commit SHA: " + report.git_sha,
+    "Inventory: " + report.inventory,
+    "Playbook: " + report.playbook,
+    "Grupa: " + report.group,
+    "Tryb: " + report.mode,
+    "Hosty (" + report.host_count + "): " + report.hosts.join(", "),
+    "Moduły: " + (report.modules.join(", ") || "brak"),
+    "Fingerprint raportu: " + item.fingerprint,
+    "Wynik: " + (report.eligible ? "DO ZATWIERDZENIA" : "ZABLOKOWANY"),
+    ...(report.blockers.length ? ["Blokady:", ...report.blockers.map(x => "  - " + x)] : []),
+    "Wykonanie: WYŁĄCZONE",
+    item.approved_by ? "Zatwierdził: " + item.approved_by + " · " + item.approved_at : "",
+    report.warning,
+  ].filter(Boolean).join("\n");
+  preflightApprove.disabled = item.state !== "reviewable";
+  preflightResult.hidden = false;
+}
+async function loadPreflightHistory() {
+  try {
+    const data = await request("/api/preflight/reviews");
+    preflightHistory.replaceChildren();
+    for (const item of data.reviews) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "#" + item.id + " · " + item.state + " · " + item.report.repository;
+      button.addEventListener("click", async () => {
+        try {
+          renderPreflight(await request("/api/preflight/reviews/" + item.id));
+        } catch (error) {
+          preflightStatus.textContent = error.message || "Nie można otworzyć raportu.";
+        }
+      });
+      preflightHistory.append(button);
+    }
+  } catch (error) {
+    preflightStatus.textContent = error.message || "Historia preflightów jest niedostępna.";
+  }
+}
+preflightRun.addEventListener("click", async () => {
+  const params = {
+    repository: taskRepo.value, inventory: taskInventory.value,
+    playbook: taskPlaybook.value, group: taskGroup.value,
+    mode: preflightMode.value,
+  };
+  preflightRun.disabled = true;
+  preflightResult.hidden = true;
+  preflightStatus.textContent = "Weryfikacja Git, hostów i modułów…";
+  try {
+    const result = await request("/api/preflight/reviews", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(params),
+    });
+    renderPreflight(result);
+    preflightStatus.textContent = result.state === "blocked"
+      ? "Preflight zablokowany — sprawdź powody poniżej."
+      : "Raport gotowy do zatwierdzenia. Nie uruchomiono Ansible.";
+    await loadPreflightHistory();
+  } catch (error) {
+    preflightStatus.textContent = error.message || "Nie udało się wykonać preflightu.";
+  } finally {
+    preflightRun.disabled = !taskRepo.value || !taskInventory.value ||
+      !taskPlaybook.value || !taskGroup.value;
+  }
+});
+preflightApprove.addEventListener("click", async () => {
+  const item = preflightCurrent;
+  if (!item || item.state !== "reviewable") return;
+  if (!confirm("Zatwierdzić raport #" + item.id + " dla " +
+    item.report.hosts.join(", ") + "? To NIE uruchamia Ansible.")) return;
+  preflightApprove.disabled = true;
+  try {
+    const result = await request("/api/preflight/reviews/" + item.id + "/approve", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({fingerprint: item.fingerprint}),
+    });
+    renderPreflight(result);
+    preflightStatus.textContent = "Raport zatwierdzony i zapisany. Wykonanie pozostaje wyłączone.";
+    await loadPreflightHistory();
+  } catch (error) {
+    preflightStatus.textContent = error.message || "Zatwierdzenie odrzucone. Otwórz nowy preflight.";
+  }
+});
+preflightRefresh.addEventListener("click", () => { void loadPreflightHistory(); });
+preflightMode.addEventListener("change", invalidatePreflight);
 
 const localJobStart = document.getElementById("local-test-start");
 const localJobCancel = document.getElementById("local-job-cancel");
