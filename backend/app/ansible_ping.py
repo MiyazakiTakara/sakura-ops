@@ -141,7 +141,7 @@ def _limits():
 def _command(executable, address, key):
     return [executable, "-i", address + ",", "all",
             "-m", "ansible.builtin.ping", "-u", USER, "--private-key", str(key),
-            "--one-line", "--forks", "1", "--timeout", "8"]
+            "--forks", "1", "--timeout", "8"]
 
 
 def _run(job_id):
@@ -170,7 +170,8 @@ def _run(job_id):
                     "host_key_checking = True\n"
                     "interpreter_python = auto_silent\n"
                     "[ssh_connection]\n"
-                    "ssh_args = -o BatchMode=yes -o StrictHostKeyChecking=yes "
+                    "usetty = False\n"
+                    "ssh_args = -T -o BatchMode=yes -o StrictHostKeyChecking=yes "
                     "-o UserKnownHostsFile=" + str(known)
                     + " -o IdentitiesOnly=yes -o IdentityAgent=none"
                     + " -o ForwardAgent=no -o ForwardX11=no"
@@ -182,7 +183,8 @@ def _run(job_id):
                        "ANSIBLE_CONFIG": str(config),
                        "ANSIBLE_LOCAL_TEMP": directory,
                        "ANSIBLE_NOCOLOR": "1", "PYTHONNOUSERSITE": "1",
-                       "ANSIBLE_HOST_KEY_CHECKING": "True"}
+                       "ANSIBLE_HOST_KEY_CHECKING": "True",
+                       "ANSIBLE_SSH_USETTY": "false"}
                 command = _command(executable, address, key)
                 _append(job_id, "[SakuraOps] Ansible builtin ping: " + alias
                         + " (" + address + "), user " + USER + ".\n")
