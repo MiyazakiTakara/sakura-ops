@@ -182,6 +182,41 @@ def test_separate_user_required_at_service_boundary(tmp_path):
                                str(tmp_path / "executor.sqlite"), os.geteuid())
 
 
+
+def test_legacy_receipts_database_migrates(tmp_path):
+    import sqlite3
+    dbfile = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(dbfile) as db:
+        db.execute("""CREATE TABLE receipts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, fingerprint TEXT NOT NULL,
+            sha TEXT NOT NULL, hosts TEXT NOT NULL, state TEXT NOT NULL,
+            created_at TEXT NOT NULL, finished_at TEXT, client_uid INTEGER NOT NULL)""")
+        db.execute("""INSERT INTO receipts (
+            fingerprint, sha, hosts, state, created_at, client_uid)
+            VALUES (?, ?, ?, 'cancelled', 'old-date', 1000)""",
+            ("b" * 64, "a" * 40, '["semaphore"]'))
+    migrated = executor_service.Store(dbfile)
+    assert migrated.get(1)["state"] == "cancelled"
+    assert migrated.submit(ticket(), 1000, KEY)["id"] == 2
+
+
+def test_ticket_private_key_file_permissions(monkeypatch, tmp_path):
+    path = tmp_path / "approval.key"
+    path.write_bytes(KEY)
+    path.chmod(0o600)
+    monkeypatch.setenv("SAKURAOPS_EXECUTOR_APPROVAL_KEY", str(path))
+    assert tickets.load_key() == KEY
+    path.chmod(0o644)
+    with pytest.raises(ValueError, match="owner-only"):
+        tickets.load_key()
+    path.chmod(0o600)
+    link = tmp_path / "key-link"
+    link.symlink_to(path)
+    monkeypatch.setenv("SAKURAOPS_EXECUTOR_APPROVAL_KEY", str(link))
+    with pytest.raises(ValueError):
+        tickets.load_key()
+
+
 def test_api_has_no_shell_bridge():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "backend/app"
