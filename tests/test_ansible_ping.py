@@ -88,6 +88,9 @@ def test_literal_builtin_module_and_own_identity(ping_env, monkeypatch):
         cfg = config.read_text()
         assert "StrictHostKeyChecking=yes" in cfg
         assert "ControlMaster=no" in cfg
+        assert "usetty = False" in cfg
+        assert "ssh_args = -T " in cfg
+        assert kw["env"]["ANSIBLE_SSH_USETTY"] == "false"
         assert str(ping_env[1]) in cfg
         return real_popen([sys.executable, "-c", "print('SUCCESS => pong')"], **kw)
 
@@ -101,7 +104,7 @@ def test_literal_builtin_module_and_own_identity(ping_env, monkeypatch):
     cmd, kw = calls[0]
     assert cmd == ["/venv/bin/ansible", "-i", "192.0.2.181,", "all",
                    "-m", "ansible.builtin.ping", "-u", "sakuraops-ping",
-                   "--private-key", str(ping_env[0]), "--one-line",
+                   "--private-key", str(ping_env[0]),
                    "--forks", "1", "--timeout", "8"]
     assert kw["stdin"] == subprocess.DEVNULL
     assert kw["env"]["HOME"] != str(Path.home())
