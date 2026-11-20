@@ -72,6 +72,7 @@ def test_local_runner_streams_log_and_finishes(jobs_db, monkeypatch):
         # Execute a fixed local print only; never run or require Ansible in CI.
         return original_popen([sys.executable, "-c", "print('LOCAL SMOKE PASS')"], **kwargs)
 
+    monkeypatch.setattr(local_jobs.shutil, "which", lambda name: "/usr/bin/ansible-playbook")
     monkeypatch.setattr(local_jobs.subprocess, "Popen", fake_popen)
     local_jobs._run(row["id"])
     finished = local_jobs.get_job(row["id"])
@@ -79,7 +80,7 @@ def test_local_runner_streams_log_and_finishes(jobs_db, monkeypatch):
     assert finished["exit_code"] == 0
     assert "LOCAL SMOKE PASS" in finished["log"]
     command, kwargs = observed[0]
-    assert command[0] == "ansible-playbook"
+    assert command[0].endswith("/ansible-playbook")
     assert "--check" in command
     assert command[command.index("--limit") + 1] == "localhost"
     assert "localhost," in command
