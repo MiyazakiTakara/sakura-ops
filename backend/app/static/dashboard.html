@@ -112,6 +112,10 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 .local-jobs-list button[aria-current=true]{border-color:#D9A0B7;color:#F5CDE0}
 .local-job-detail{margin-top:14px}
 #local-job-log{background:#121a21;color:#C9D4DC;border:1px solid #465360;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:330px;min-height:140px;overflow:auto;padding:12px;font:12px/1.6 ui-monospace,monospace}
+#ssh-diagnostic-log{background:#121a21;color:#C9D4DC;border:1px solid #465360;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;min-height:100px;overflow:auto;padding:12px;font:12px/1.6 ui-monospace,monospace}
+#ssh-diagnostic-start:disabled,#ssh-diagnostic-stop:disabled{opacity:.5;cursor:not-allowed}
+#ssh-diagnostic-config-status{margin:10px 0}
+#ssh-diagnostic-target{min-width:190px;max-width:100%}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -182,6 +186,23 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
         </div>
         <pre id="local-job-log" role="log" aria-label="Log lokalnego zadania Ansible">Brak wybranego zadania.</pre>
       </div>
+    </div>
+    <div class="panel" id="ssh-diagnostic-panel">
+      <h2>Diagnostyka SSH — tylko zatwierdzone hosty</h2>
+      <p>Stałe polecenie <code>true</code> na dedykowanym koncie <code>sakuraops-diag</code>, bez sudo i bez uruchamiania playbooków. Wymaga jawnego włączenia, allowlisty IP, prywatnego klucza SSH i przypiętych kluczy hostów.</p>
+      <div class="files-toolbar">
+        <label for="ssh-diagnostic-target">Host docelowy</label>
+        <select id="ssh-diagnostic-target" aria-label="Wybierz zatwierdzony host SSH"></select>
+        <button class="repo-sync" type="button" id="ssh-diagnostic-start" disabled>Sprawdź SSH</button>
+        <button class="repo-sync" type="button" id="ssh-diagnostic-refresh">Odśwież</button>
+      </div>
+      <div id="ssh-diagnostic-config-status" class="repo-note" role="status" aria-live="polite">Sprawdzanie konfiguracji…</div>
+      <div id="ssh-diagnostic-history" class="local-jobs-list"></div>
+      <div class="local-job-controls">
+        <strong id="ssh-diagnostic-title">Wybierz diagnostykę</strong>
+        <button class="repo-delete" id="ssh-diagnostic-stop" type="button" disabled>Zatrzymaj</button>
+      </div>
+      <pre id="ssh-diagnostic-log" role="log" aria-label="Log diagnostyki SSH">Brak wybranego zadania.</pre>
     </div>
    </section>
    <section id="servers-view" hidden aria-label="Hosty Ansible">
