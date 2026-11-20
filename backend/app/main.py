@@ -170,6 +170,12 @@ from .git_sync import synchronize, list_cached_files, read_repository_file, writ
 from .git_changes import git_status, commit_selected, push_explicit
 from .inventory_preview import preview_inventory
 from .task_plans import task_plan
+from .local_jobs import (enqueue, list_jobs, get_job, cancel_job,
+                         enabled as local_jobs_enabled, start_worker, stop_worker)
+
+
+app.add_event_handler("startup", start_worker)
+app.add_event_handler("shutdown", stop_worker)
 
 
 class ConsoleCommand(BaseModel):
@@ -205,6 +211,29 @@ def console_execute(request: Request, body: ConsoleCommand):
         result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
+    if action in ("local-test-create", "local-test-list", "local-test-show", "local-test-cancel"):
+        if user["role"] != "admin":
+            raise HTTPException(403, "Zadania wymagają roli administratora")
+        if action == "local-test-create":
+            row = enqueue()
+            result["output"] = "Test localhost dodany do kolejki: #" + str(row["id"])
+        elif action == "local-test-list":
+            rows = list_jobs()
+            result["output"] = ("\\n".join(
+                "#" + str(row["id"]) + "  " + row["status"] + "  " + row["created_at"]
+                for row in rows
+            ) or "Brak zadań.")
+        elif action == "local-test-show":
+            row = get_job(result["job_id"])
+            result["output"] = ("Test #" + str(row["id"]) + " — " + row["status"]
+                                + "\\n" + row["log"])
+        else:
+            row = cancel_job(result["job_id"])
+            result["output"] = "Test #" + str(row["id"]) + ": " + row["status"]
+        result.pop("action", None)
+        result.pop("job_id", None)
+        return result
+
     if action in ("repositories-list", "repository-add", "repository-delete", "repository-sync", "repository-files", "repository-read", "repository-edit", "repository-diff", "repository-status", "repository-commit", "repository-push", "inventory-preview", "task-plan"):
         if user["role"] != "admin":
             raise HTTPException(403, "Zarządzanie repozytoriami wymaga roli administratora")
@@ -420,6 +449,54 @@ class TaskPlanRequest(BaseModel):
 def preview_task_plan(request: Request, body: TaskPlanRequest):
     require_console_session(request, edit=True)
     return task_plan(body.repository, body.inventory, body.playbook, body.group)
+
+
+@app.get("/api/jobs")
+def jobs_get(request: Request):
+    require_console_session(request, edit=True)
+    return {"enabled": local_jobs_enabled(), "jobs": list_jobs()}
+
+
+@app.post("/api/jobs/local-test", status_code=201)
+def jobs_local_test(request: Request):
+    require_console_session(request, edit=True)
+    return enqueue()
+
+
+@app.get("/api/jobs/{job_id}")
+def jobs_get_one(request: Request, job_id: int):
+    require_console_session(request, edit=True)
+    return get_job(job_id)
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def jobs_cancel(request: Request, job_id: int):
+    require_console_session(request, edit=True)
+    return cancel_job(job_id)
+
+
+@app.get("/api/jobs/{job_id}/events")
+async def jobs_events(request: Request, job_id: int):
+    require_console_session(request, edit=True)
+    get_job(job_id)
+
+    async def updates():
+        previous = None
+        while not await request.is_disconnected():
+            row = await asyncio.to_thread(get_job, job_id)
+            signature = (row["status"], row["log"], row["cancel_requested"])
+            if signature != previous:
+                previous = signature
+                yield "event: job-update\\ndata: " + __import__("json").dumps(
+                    row, ensure_ascii=False
+                ) + "\\n\\n"
+            if row["status"] in ("success", "failed", "cancelled"):
+                return
+            await asyncio.sleep(0.5)
+    return StreamingResponse(
+        updates(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.delete("/api/repositories/{name}")
