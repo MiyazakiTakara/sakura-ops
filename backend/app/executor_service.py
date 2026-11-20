@@ -18,7 +18,10 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
-import executor_ticket as ticket_auth
+if __package__:
+    from . import executor_ticket as ticket_auth
+else:
+    import executor_ticket as ticket_auth
 
 MAX_REQUEST = 4096
 MAX_ACTIVE = 10
