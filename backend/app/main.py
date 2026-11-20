@@ -188,6 +188,7 @@ from .git_changes import git_status, commit_selected, push_explicit
 from .inventory_preview import preview_inventory
 from .task_plans import task_plan
 from . import preflight
+from . import executor_client
 from .local_jobs import (enqueue, list_jobs, get_job, cancel_job,
                          enabled as local_jobs_enabled, start_worker, stop_worker)
 
@@ -518,6 +519,30 @@ def preflight_get(request: Request, review_id: int):
 def preflight_approve(request: Request, review_id: int, body: PreflightApproval):
     user = require_console_session(request, edit=True)
     return preflight.approve(review_id, body.fingerprint, user["username"])
+
+
+@app.get("/api/executor/health")
+def executor_health(request: Request):
+    require_console_session(request, edit=True)
+    return executor_client.health()
+
+
+@app.post("/api/executor/receipts", status_code=201)
+def executor_submit(request: Request, review_id: int):
+    require_console_session(request, edit=True)
+    return executor_client.submit(review_id)
+
+
+@app.get("/api/executor/receipts/{receipt_id}")
+def executor_receipt(request: Request, receipt_id: int):
+    require_console_session(request, edit=True)
+    return executor_client.read(receipt_id)
+
+
+@app.post("/api/executor/receipts/{receipt_id}/cancel")
+def executor_cancel(request: Request, receipt_id: int):
+    require_console_session(request, edit=True)
+    return executor_client.cancel(receipt_id)
 
 
 @app.get("/api/jobs")
