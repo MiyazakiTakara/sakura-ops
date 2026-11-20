@@ -93,3 +93,7 @@ uruchamiania dowolnych procesów w swojej przestrzeni użytkownika, jeśli
 klucz zostanie przejęty. Testuj najpierw na Semaphore, bez sudo i poza
 wrażliwymi katalogami. Nie skaluj tego mechanizmu na produkcję bez dalszego
 etapu izolacji.
+
+## SSH bez PTY
+
+Zabezpieczenie `restrict` w `authorized_keys` blokuje przydział PTY. Ansible domyślnie dodaje `-tt` do wybranych wywołań SSH, co kończyło się błędem `PTY allocation request failed on channel 0`. Wykonawca wyłącza to przez `usetty = False` oraz `ANSIBLE_SSH_USETTY=false`, dodatkowo wymuszając `ssh_args = -T`. Nie trzeba zmieniać ani osłabiać wpisu `restrict` na Semaphore. Usunięto też przestarzałą flagę `--one-line`.
