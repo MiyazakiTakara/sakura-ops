@@ -2,8 +2,8 @@
 import shlex
 
 VERSION = "0.2.0-dev"
-ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push", "task plan", "task test", "task cancel")
-SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository", "show hosts", "show groups", "show jobs", "show job")
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push", "task plan", "task test", "task cancel", "ssh diagnose", "ssh cancel")
+SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository", "show hosts", "show groups", "show jobs", "show job", "show ssh diagnostics", "show ssh job")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
@@ -31,6 +31,10 @@ COMMANDS = {
     "show hosts <repo> <inventory>": "Hosty ze statycznego inventory (bez wykonywania Ansible)",
     "show groups <repo> <inventory>": "Grupy i hosty ze statycznego inventory",
     "task plan <repo> <inventory> <playbook> <grupa>": "Podgląd celu zadania bez uruchamiania Ansible",
+    "ssh diagnose <alias>": "Sprawdź SSH na jawnie dopuszczonym hoście (stałe polecenie true)",
+    "ssh cancel <id>": "Zatrzymaj diagnostykę SSH",
+    "show ssh diagnostics": "Historia diagnostyki SSH",
+    "show ssh job <id>": "Log i status diagnostyki SSH",
     "task test": "Dodaj stały test localhost do kolejki (bez hostów z inventory)",
     "task cancel <id>": "Anuluj lokalny test Ansible",
     "show jobs": "Historia testów lokalnych",
@@ -83,6 +87,14 @@ def interpret(command: str, mode: str = "exec") -> dict:
 
     if name in ("help", "?"):
         return result("\n".join(COMMANDS if mode == "exec" else suggestions(mode)))
+    if mode == "exec" and len(args) == 3 and lowered[:2] == ["ssh", "diagnose"]:
+        return result("", action="ssh-diagnostic-create", alias=args[2])
+    if mode == "exec" and len(args) == 3 and lowered[:2] == ["ssh", "cancel"] and args[2].isdigit():
+        return result("", action="ssh-diagnostic-cancel", job_id=int(args[2]))
+    if mode == "exec" and lowered == ["show", "ssh", "diagnostics"]:
+        return result("", action="ssh-diagnostic-list")
+    if mode == "exec" and len(args) == 4 and lowered[:3] == ["show", "ssh", "job"] and args[3].isdigit():
+        return result("", action="ssh-diagnostic-show", job_id=int(args[3]))
     if mode == "exec" and lowered == ["task", "test"]:
         return result("", action="local-test-create")
     if mode == "exec" and lowered == ["show", "jobs"]:
