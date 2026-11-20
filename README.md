@@ -12,7 +12,7 @@ Self-hosted infrastructure management platform.
 
 ## Development roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for delivered features, the gated PR #18–21 plan, and long-term milestones.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for delivered features, the gated PR #19–22 plan, and long-term milestones.
 
 ## Technology
 
