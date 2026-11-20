@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
+import executor_ticket as ticket_auth
+
 MAX_REQUEST = 4096
 MAX_ACTIVE = 10
 SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -39,7 +41,8 @@ class Store:
                 fingerprint TEXT NOT NULL, sha TEXT NOT NULL,
                 hosts TEXT NOT NULL, state TEXT NOT NULL,
                 created_at TEXT NOT NULL, finished_at TEXT,
-                client_uid INTEGER NOT NULL)""")
+                client_uid INTEGER NOT NULL,
+                nonce TEXT UNIQUE)""")
 
     @contextmanager
     def connect(self):
@@ -57,13 +60,10 @@ class Store:
                 "hosts": json.loads(row[3]), "state": row[4],
                 "created_at": row[5], "finished_at": row[6]}
 
-    def submit(self, fingerprint, sha, hosts, uid):
-        if (not isinstance(fingerprint, str) or not DIGEST.fullmatch(fingerprint)
-                or not isinstance(sha, str) or not SHA.fullmatch(sha)
-                or not isinstance(hosts, list) or not 1 <= len(hosts) <= 20
-                or len(set(hosts)) != len(hosts)
-                or any(not isinstance(h, str) or not HOST.fullmatch(h) for h in hosts)):
-            raise ValueError("Invalid fixed admission envelope")
+    def submit(self, ticket, uid, key):
+        fields = ticket_auth.verify(ticket, key)
+        hosts = fields["hosts"]
+        fingerprint, sha = fields["fingerprint"], fields["sha"]
         with self.lock, self.connect() as db:
             active = db.execute("SELECT hosts FROM receipts WHERE state='queued'").fetchall()
             if len(active) >= MAX_ACTIVE:
@@ -71,12 +71,15 @@ class Store:
             for (encoded,) in active:
                 if set(json.loads(encoded)) & set(hosts):
                     raise ValueError("Target is already locked by another pending receipt")
-            cursor = db.execute("""INSERT INTO receipts
-                (fingerprint, sha, hosts, state, created_at, client_uid)
-                VALUES (?, ?, ?, 'queued', ?, ?)""",
-                (fingerprint, sha, json.dumps(sorted(hosts)), timestamp(), uid))
-            row_id = cursor.lastrowid
-            return self.get(row_id, db)
+            try:
+                cursor = db.execute("""INSERT INTO receipts
+                    (fingerprint, sha, hosts, state, created_at, client_uid, nonce)
+                    VALUES (?, ?, ?, 'queued', ?, ?, ?)""",
+                    (fingerprint, sha, json.dumps(hosts), timestamp(),
+                     uid, fields["nonce"]))
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("Ticket nonce already used") from exc
+            return self.get(cursor.lastrowid, db)
 
     def get(self, receipt_id, db=None):
         if not isinstance(receipt_id, int) or isinstance(receipt_id, bool) or receipt_id < 1:
@@ -123,22 +126,22 @@ class Store:
 
 
 class Protocol:
-    def __init__(self, store, allowed_uid):
+    def __init__(self, store, allowed_uid, key):
         self.store = store
         self.allowed_uid = allowed_uid
+        self.key = key
 
     def handle(self, message, uid):
         if uid != self.allowed_uid:
             raise PermissionError("Caller UID not permitted")
         if not isinstance(message, dict) or set(message) not in (
-            {"op"}, {"op", "id"}, {"op", "fingerprint", "sha", "hosts"}):
+            {"op"}, {"op", "id"}, {"op", "ticket"}):
             raise ValueError("Unknown request envelope")
         op = message.get("op")
         if op == "status" and set(message) == {"op"}:
             return {"version": 1, "mode": "admission_only", "exec_enabled": False}
-        if op == "submit" and set(message) == {"op", "fingerprint", "sha", "hosts"}:
-            return self.store.submit(message["fingerprint"], message["sha"],
-                                     message["hosts"], uid)
+        if op == "submit" and set(message) == {"op", "ticket"}:
+            return self.store.submit(message["ticket"], uid, self.key)
         if op in ("get", "cancel") and set(message) == {"op", "id"}:
             if op == "get":
                 return self.store.get(message["id"])
@@ -194,10 +197,11 @@ def serve(socket_path, database, api_uid):
         raise ValueError("Executor must be a distinct non-root OS user")
     old_umask = os.umask(0o077)
     try:
+        key = ticket_auth.load_key()
         store = Store(db)
         os.chmod(db, 0o600)
         store.recover()
-        with Server(str(sock), Protocol(store, api_uid)) as server:
+        with Server(str(sock), Protocol(store, api_uid, key)) as server:
             os.chmod(sock, 0o660)
             stop = threading.Event()
             def drain():
