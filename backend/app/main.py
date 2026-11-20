@@ -478,7 +478,12 @@ def jobs_cancel(request: Request, job_id: int):
 
 @app.get("/api/jobs/{job_id}/events")
 async def jobs_events(request: Request, job_id: int):
-    require_console_session(request, edit=True)
+    # EventSource cannot attach X-CSRF-Token; this endpoint is read-only.
+    user = current_user(request)
+    if user is None:
+        raise HTTPException(401, "Wymagane logowanie")
+    if user["role"] != "admin":
+        raise HTTPException(403, "Wymagana rola administratora")
     get_job(job_id)
 
     async def updates():
