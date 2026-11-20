@@ -104,6 +104,45 @@ def _parse(source):
     return modules, errors[:30]
 
 
+def _inventory_issues(inventory, content):
+    """Fail closed on vars, host options, and unsupported inventory constructs."""
+    if inventory.endswith(".ini"):
+        for raw in content.splitlines():
+            line = raw.strip()
+            if not line or line.startswith(("#", ";")):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                if line[1:-1].endswith(":vars"):
+                    return ["Inventory INI: sekcja vars niedozwolona"]
+            elif "=" in line or any(x in line for x in ("{{", "{%", "ansible_")):
+                return ["Inventory INI: zmienne i opcje hosta niedozwolone"]
+        return []
+    try:
+        import yaml
+        events = yaml.parse(content)
+        if any(isinstance(ev, yaml.AliasEvent) or getattr(ev, "anchor", None)
+               for ev in events):
+            return ["Inventory YAML: aliasy niedozwolone"]
+        tree = yaml.safe_load(content)
+    except yaml.YAMLError:
+        return ["Inventory YAML: błąd składni"]
+
+    def group_ok(node, depth=0):
+        if depth > 30 or not isinstance(node, dict) or set(node) - {"hosts", "children"}:
+            return False
+        hosts = node.get("hosts", {})
+        children = node.get("children", {})
+        if not isinstance(hosts, dict) or not isinstance(children, dict):
+            return False
+        if any(props not in ({}, None) for props in hosts.values()):
+            return False
+        return all(group_ok(value, depth + 1) for value in children.values())
+
+    if not isinstance(tree, dict) or not all(group_ok(node) for node in tree.values()):
+        return ["Inventory YAML: dozwolone tylko literalne hosty i grupy bez zmiennych"]
+    return []
+
+
 def _assess(repo, inventory, playbook, group, mode):
     if mode not in ("diagnostic", "check") or not IDENT.fullmatch(group):
         raise HTTPException(422, "Nieprawidłowy tryb lub grupa")
@@ -113,7 +152,7 @@ def _assess(repo, inventory, playbook, group, mode):
     if selected is None or not selected["hosts"]:
         raise HTTPException(422, "Brak hostów w wybranej grupie")
     hosts = selected["hosts"]
-    errors = []
+    errors = _inventory_issues(inventory, inv["content"])
     if len(hosts) > 20:
         errors.append("Limit 20 hostów")
     unknown = sorted(set(hosts) - _allowlist())
@@ -123,6 +162,11 @@ def _assess(repo, inventory, playbook, group, mode):
         errors.append("Playbook musi być plikiem YAML")
     modules, problems = _parse(play["content"])
     errors.extend(problems)
+    # Revalidate after the inventory preview and YAML inspection (TOCTOU).
+    current_sha, current_inv, current_play = _snapshot(repo, inventory, playbook)
+    if (current_sha != sha or current_inv["revision"] != inv["revision"] or
+            current_play["revision"] != play["revision"]):
+        raise HTTPException(409, "Źródła zmieniły się podczas preflightu")
     report = {"repository": repo, "inventory": inventory, "playbook": playbook,
               "group": group, "mode": mode, "git_sha": sha,
               "inventory_digest": inv["revision"], "playbook_digest": play["revision"],
