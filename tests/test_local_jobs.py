@@ -113,3 +113,20 @@ def test_console_and_api_wiring():
     for label in ("local-test-start", "local-job-log", "local-job-cancel"):
         assert f'id="{label}"' in page
     assert 'new EventSource("/api/jobs/"' in js
+
+
+def test_fastapi_lifespan_starts_and_stops_worker(monkeypatch):
+    import asyncio
+    from backend.app.main import app
+    starts = []
+    stops = []
+    monkeypatch.setattr(local_jobs, "start_worker", lambda: starts.append(True))
+    monkeypatch.setattr(local_jobs, "stop_worker", lambda: stops.append(True))
+
+    async def verify():
+        async with app.router.lifespan_context(app):
+            assert starts == [True]
+            assert stops == []
+        assert stops == [True]
+
+    asyncio.run(verify())
