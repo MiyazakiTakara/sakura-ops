@@ -1,6 +1,7 @@
 """Local Ansible job executor tests — no remote hosts or user playbooks."""
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -68,6 +69,14 @@ def test_local_runner_streams_log_and_finishes(jobs_db, monkeypatch):
     observed = []
 
     def fake_popen(command, **kwargs):
+        config = Path(kwargs["env"]["ANSIBLE_CONFIG"])
+        assert config.name == "ansible.cfg"
+        assert config.is_file()
+        assert config.stat().st_mode & 0o777 == 0o600
+        assert config.read_text(encoding="utf-8") == (
+            "[defaults]\\nretry_files_enabled = False\\n"
+        )
+        assert str(config.parent) == kwargs["cwd"]
         observed.append((command, kwargs))
         # Execute a fixed local print only; never run or require Ansible in CI.
         return original_popen([sys.executable, "-c", "print('LOCAL SMOKE PASS')"], **kwargs)
@@ -87,7 +96,7 @@ def test_local_runner_streams_log_and_finishes(jobs_db, monkeypatch):
     assert "inventory/hosts.ini" not in command
     assert "playbooks/linux-inventory.yml" not in command
     assert kwargs["stdin"] == subprocess.DEVNULL
-    assert kwargs["env"]["ANSIBLE_CONFIG"] == "/dev/null"
+    assert kwargs["env"]["ANSIBLE_CONFIG"].endswith("/ansible.cfg")
 
 
 def test_worker_handles_queued_cancel_without_starting_job(jobs_db):
