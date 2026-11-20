@@ -103,3 +103,18 @@ Nie powstają zadania Ansible, nie ma CLI do dowolnych komend i nie są uruchami
 5. Po prawidłowym odbiorze dopiero w PR #21 projektuj osobny tryb wykonania kontrolowanych playbooków diagnostycznych; nie uruchamiaj produkcji bez odrębnej autoryzacji.
 
 **Ograniczenie:** w obecnym etapie brak jeszcze polityk pozwalających na realną pracę Ansible. Jest to warstwa separacji i dopuszczania metadanych, a nie kompletna piaskownica do wykonania niezaufanych playbooków.
+
+## Ograniczenie bezpieczeństwa przed PR #21
+
+Każdy proces z prawem połączenia do gniazda (ten sam UID API lub
+członkostwo w grupie `sakuraops-ipc`) może wysłać własny `submit`
+bez zatwierdzenia preflightu przez API. Demon waliduje jedynie schemat
+metadanych i UID, **nie potwierdza samodzielnie podpisu ani uprawnień
+administratora**. Dlatego `validated` nie stanowi dowodu autoryzacji.
+
+**Blokada wdrożeniowa:** przed dodaniem jakiegokolwiek wykonania Ansible
+należy usunąć tę możliwość obejścia, np. przez weryfikowalny, jednorazowy
+bilet zatwierdzenia i niezależne sprawdzenie dopuszczonego profilu w demonie.
+Do tego czasu `exec_enabled: false` musi pozostać niezmienne. Nie wolno
+traktować obecnych rekordów `approved` ani `validated` jako pozwolenia
+na uruchomienie polecenia lub playbooka.
