@@ -4,6 +4,7 @@ This module cannot execute commands or open network connections. A future
 separately reviewed runner may consume a validated plan only after explicit
 host-key, SSH credential, privilege and isolation acceptance.
 """
+import hmac
 import ipaddress
 import json
 import os
@@ -14,6 +15,11 @@ from pathlib import Path
 ALIAS = re.compile(r"[a-z][a-z0-9-]{0,62}\Z")
 PORT = 22
 PROFILE = "builtin-ping"
+FIXED_ALIAS = "semaphore"
+FIXED_ADDRESS = "172.24.3.181"
+TICKET_KEYS = {"profile", "mode", "hosts", "sha", "fingerprint"}
+GIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
+FINGERPRINT = re.compile(r"[0-9a-f]{64}\Z")
 MAX_TARGETS = 1
 ENTRY_KEYS = {"alias", "address", "user", "host_key_sha256"}
 USER = re.compile(r"[a-z_][a-z0-9_-]{0,31}\Z")
@@ -26,7 +32,7 @@ def validate_target(entry):
         raise ValueError("Unknown target configuration")
     alias, address = entry["alias"], entry["address"]
     username, pin = entry["user"], entry["host_key_sha256"]
-    if not isinstance(alias, str) or not ALIAS.fullmatch(alias):
+    if not isinstance(alias, str) or alias != FIXED_ALIAS:
         raise ValueError("Invalid fixed target alias")
     if not isinstance(username, str) or not USER.fullmatch(username) or username == "root":
         raise ValueError("Dedicated non-root SSH user required")
@@ -42,6 +48,8 @@ def validate_target(entry):
             or ip.is_link_local or ip.is_reserved or not ip.is_private
             or ip.version != 4):
         raise ValueError("Target must be an explicit private IPv4 address")
+    if str(ip) != FIXED_ADDRESS:
+        raise ValueError("Only the fixed Semaphore address is permitted")
     return {"alias": alias, "address": str(ip), "user": username,
             "host_key_sha256": pin}
 
@@ -75,17 +83,33 @@ def read_policy(path):
     return validate_target(policy["target"])
 
 
-def plan(ticket_fields, target):
-    """Fail closed when ticket and fixed Semaphore target are not an exact match."""
-    if not isinstance(ticket_fields, dict) or ticket_fields.get("profile") != PROFILE:
-        raise ValueError("Only built-in ping is permitted")
-    if ticket_fields.get("mode") != "diagnostic":
-        raise ValueError("Only explicitly reviewed diagnostic mode is permitted")
-    if ticket_fields.get("hosts") != [target["alias"]]:
-        raise ValueError("Ticket targets must exactly equal pinned allowlisted alias")
-    if ticket_fields.get("sha") is None or ticket_fields.get("fingerprint") is None:
-        raise ValueError("An approved Git fingerprint and SHA are required")
-    return {"profile": PROFILE, "host": target["alias"],
-            "address": target["address"], "ssh_user": target["user"],
-            "pinned_host_key": target["host_key_sha256"],
-            "command_execution": False, "reason": "Awaiting reviewed runner and manual Semaphore QA"}
+def plan(ticket_fields, target, *, approved_sha, approved_fingerprint):
+    """Plan only after matching a separately approved Git commit and fingerprint.
+
+    Approved values must come from a trusted operator-controlled approval
+    record, never copied from the caller's ticket fields.
+    The admission daemon is responsible for authenticating the ticket first.
+    """
+    if not isinstance(ticket_fields, dict) or set(ticket_fields) != TICKET_KEYS:
+        raise ValueError("Ticket fields must match exact diagnostic schema")
+    if ticket_fields["profile"] != PROFILE or ticket_fields["mode"] != "diagnostic":
+        raise ValueError("Only fixed diagnostic ping is permitted")
+    if ticket_fields["hosts"] != [FIXED_ALIAS]:
+        raise ValueError("Only the fixed Semaphore alias is permitted")
+    if not isinstance(target, dict) or set(target) != ENTRY_KEYS:
+        raise ValueError("Invalid target")
+    validated = validate_target(target)
+    sha, fingerprint = ticket_fields["sha"], ticket_fields["fingerprint"]
+    for value, pattern in ((sha, GIT_SHA), (approved_sha, GIT_SHA),
+                           (fingerprint, FINGERPRINT),
+                           (approved_fingerprint, FINGERPRINT)):
+        if not isinstance(value, str) or not pattern.fullmatch(value):
+            raise ValueError("Invalid or missing approved Git identity")
+    if not hmac.compare_digest(sha, approved_sha) or not hmac.compare_digest(
+            fingerprint, approved_fingerprint):
+        raise ValueError("Ticket Git identity differs from approved values")
+    return {"profile": PROFILE, "host": validated["alias"],
+            "address": validated["address"], "ssh_user": validated["user"],
+            "pinned_host_key": validated["host_key_sha256"],
+            "command_execution": False,
+            "reason": "Awaiting reviewed runner and manual Semaphore QA"}
