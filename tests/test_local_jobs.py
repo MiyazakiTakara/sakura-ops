@@ -74,7 +74,7 @@ def test_local_runner_streams_log_and_finishes(jobs_db, monkeypatch):
         assert config.is_file()
         assert config.stat().st_mode & 0o777 == 0o600
         assert config.read_text(encoding="utf-8") == (
-            "[defaults]\\nretry_files_enabled = False\\n"
+            "[defaults]\nretry_files_enabled = False\n"
         )
         assert str(config.parent) == kwargs["cwd"]
         observed.append((command, kwargs))
