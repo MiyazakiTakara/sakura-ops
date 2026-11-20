@@ -120,6 +120,9 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
 #ansible-ping-target{min-width:190px;max-width:100%}
 #ansible-ping-status{margin:10px 0}
 #ansible-ping-start:disabled,#ansible-ping-stop:disabled{opacity:.5;cursor:not-allowed}
+#preflight-details{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #465360;border-radius:7px;background:#121a21;color:#c9d4dc;padding:12px;font:12px/1.6 ui-monospace,monospace;max-height:400px;overflow:auto}
+#preflight-approve:disabled,#preflight-run:disabled{opacity:.5;cursor:not-allowed}
+#preflight-status{margin:10px 0}
 </style>
 <link rel="stylesheet" href="/static/generated/terminal.css">
 </head>
@@ -172,6 +175,29 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
       <h2>Hosty docelowe</h2>
       <div id="task-plan-hosts" class="server-hosts"></div>
       <p>To podgląd statyczny, nie wynik rzeczywistej ewaluacji Ansible. Wykonywanie playbooków z repozytoriów pozostaje wyłączone.</p>
+    </div>
+    <div class="panel" id="preflight-panel">
+      <h2>Preflight — zatwierdzanie bez wykonania</h2>
+      <p>Analiza zatwierdzonego podzbioru playbooków z aktualnego commita Git. Pozostałe operacje zostaną zablokowane. Zatwierdzenie zapisuje decyzję, <strong>nie uruchamia Ansible</strong>.</p>
+      <div class="files-toolbar">
+        <label for="preflight-mode">Tryb planu</label>
+        <select id="preflight-mode">
+          <option value="diagnostic">Diagnostyka (bez wykonania)</option>
+          <option value="check">Check (bez wykonania)</option>
+        </select>
+        <button type="button" class="repo-sync" id="preflight-run" disabled>Przeprowadź preflight</button>
+        <button type="button" class="repo-sync" id="preflight-refresh">Historia preflightów</button>
+      </div>
+      <div id="preflight-status" class="repo-note" role="status" aria-live="polite">Wybierz repozytorium, inventory, playbook i grupę powyżej.</div>
+      <div id="preflight-history" class="local-jobs-list"></div>
+      <div id="preflight-result" hidden>
+        <div class="local-job-controls">
+          <strong id="preflight-title">Raport</strong>
+          <button type="button" id="preflight-approve" class="repo-sync" disabled>Zatwierdź raport (bez uruchomienia)</button>
+        </div>
+        <pre id="preflight-details" role="region" aria-label="Wynik preflightu"></pre>
+        <p class="repo-note">Po zatwierdzeniu nie powstaje żadne zadanie wykonawcze. Repozytorium produkcyjne i hosty pozostają nienaruszone.</p>
+      </div>
     </div>
     <div class="panel" id="local-test-panel">
       <h2>Wykonawca — test lokalny</h2>
