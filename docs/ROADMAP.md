@@ -84,14 +84,14 @@ SakuraOps is a self-hosted infrastructure management application, independent of
 
 **Acceptance:** installation, recovery, security and functional tests documented and repeatable.
 
-## Immediate delivery plan — PR #18–21
+## Immediate delivery plan — PR #19–22
 
 These milestones form the next development cycle. They can be developed
 during one work session, but must remain separate PRs with distinct
 tests, risk reviews and acceptance gates. The milestone numbers are
 planning labels, not permission to automatically run or merge code.
 
-### PR #18 — Preflight and explicit approval
+### PR #19 — Preflight and explicit approval
 
 - Select Git repository, inventory, playbook, target group and requested mode.
 - Pin the exact Git commit SHA and reject changes between planning and approval.
@@ -103,7 +103,7 @@ planning labels, not permission to automatically run or merge code.
 - **Acceptance:** automated negative/security cases pass, and **no remote
   playbook execution** occurs at this stage.
 
-### PR #19 — Isolated execution service
+### PR #20 — Isolated execution service
 
 - Separate execution service as a least-privileged OS user or container;
   the web API never runs arbitrary shell commands.
@@ -114,7 +114,7 @@ planning labels, not permission to automatically run or merge code.
 - **Acceptance:** verify isolation, permissions, secret handling and
   fail-closed behavior before enabling remote execution.
 
-### PR #20 — Approved read-only diagnostic playbooks
+### PR #21 — Approved read-only diagnostic playbooks
 
 - Execute only explicitly reviewed diagnostic playbooks at a pinned SHA.
 - Start with Semaphore and a low-privilege identity without `sudo` or
@@ -126,7 +126,7 @@ planning labels, not permission to automatically run or merge code.
 - **Acceptance:** CI and manual Semaphore QA pass; no configuration changes
   and no production host access.
 
-### PR #21 — Audit and reporting
+### PR #22 — Audit and reporting
 
 - Record actor, approval, timestamp, exact Git SHA, inventory, targets,
   mode, execution outcome and preflight reference.
@@ -135,13 +135,13 @@ planning labels, not permission to automatically run or merge code.
 - **Acceptance:** authorization, secret redaction, event integrity and
   restart/recovery cases are tested.
 
-### PR #22 — Schedules and approved templates
+### PR #23 — Schedules and approved templates
 
 - Timezone-aware recurring tasks with locking, clear failure/retry status.
 - Only previously approved templates may run; scheduling may not bypass
   preflight or role checks.
 
-### PR #23+ — Carefully controlled production operations
+### PR #24+ — Carefully controlled production operations
 
 - After separate security and operational sign-off, introduce authorized
   package updates, service management, configuration deployments and restarts.
@@ -160,7 +160,7 @@ planning labels, not permission to automatically run or merge code.
 
 ## Next action
 
-**Start PR #18: preflight and approval without execution.**
+**Start PR #19: preflight and approval without execution.**
 Do not connect repository playbooks to the remote executor until the
 security isolation and approval gates are implemented.
 
