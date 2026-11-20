@@ -155,3 +155,18 @@ def test_api_and_ui_wired_for_admin_only():
     assert 'id="ssh-diagnostic-target"' in html
     assert 'id="ssh-diagnostic-start"' in html
     assert 'new EventSource("/api/ssh-diagnostics/jobs/"' in js
+
+
+def test_ssh_console_commands_and_completions(diag_db, monkeypatch):
+    from backend.app.commands import interpret
+    from backend.app.console_completion import context_complete
+    monkeypatch.setattr("backend.app.repositories.list_repositories", lambda: [])
+    assert interpret("ssh diagnose glpi")["action"] == "ssh-diagnostic-create"
+    assert interpret("show ssh diagnostics")["action"] == "ssh-diagnostic-list"
+    assert interpret("show ssh job 3")["job_id"] == 3
+    assert interpret("ssh cancel 3")["action"] == "ssh-diagnostic-cancel"
+    assert interpret("ssh diagnose glpi;rm")["alias"] == "glpi;rm"
+    assert context_complete("ssh diagnose gl")[0] == ["ssh diagnose glpi"]
+    row = ssh_diagnostics.enqueue("glpi")
+    assert context_complete("show ssh job ")[0] == ["show ssh job " + str(row["id"])]
+    assert context_complete("ssh cancel ")[0] == ["ssh cancel " + str(row["id"])]
