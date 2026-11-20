@@ -117,6 +117,16 @@ def test_console_and_api_wiring():
 
 def test_fastapi_lifespan_starts_and_stops_worker(monkeypatch):
     import asyncio
+    from pathlib import Path
+
+    original_read_text = Path.read_text
+
+    def read_test_secret(path, *args, **kwargs):
+        if str(path).endswith("/.secrets/session_key"):
+            return "test-session-secret-for-ci-only"
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_test_secret)
     from backend.app.main import app
     starts = []
     stops = []
