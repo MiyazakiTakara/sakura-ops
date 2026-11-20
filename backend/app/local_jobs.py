@@ -117,6 +117,14 @@ def _run(job_id: int) -> None:
     outcome = "failed"
     code = None
     with tempfile.TemporaryDirectory(prefix="sakura-ansible-") as directory:
+        # Ansible requires a recognized configuration extension: /dev/null
+        # is rejected by modern ansible-core before any playbook can run.
+        config_file = Path(directory) / "ansible.cfg"
+        config_file.write_text(
+            "[defaults]\nretry_files_enabled = False\n",
+            encoding="utf-8",
+        )
+        config_file.chmod(0o600)
         executable = shutil.which("ansible-playbook")
         command = [
             executable or "ansible-playbook", "--check", "-i", "localhost,", "-c", "local",
@@ -126,7 +134,7 @@ def _run(job_id: int) -> None:
             "PATH": "/usr/local/bin:/usr/bin:/bin",
             "HOME": directory,
             "LANG": "C.UTF-8",
-            "ANSIBLE_CONFIG": "/dev/null",
+            "ANSIBLE_CONFIG": str(config_file),
             "ANSIBLE_LOCAL_TEMP": directory,
             "ANSIBLE_NOCOLOR": "1",
             "PYTHONNOUSERSITE": "1",
