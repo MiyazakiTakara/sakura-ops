@@ -2,8 +2,8 @@
 import shlex
 
 VERSION = "0.2.0-dev"
-ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push")
-SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository")
+ROOT = ("help", "show", "configure terminal", "edit", "nano", "files", "cat", "clear", "history", "exit", "end", "repository sync", "repository edit", "repository status", "repository commit", "repository push", "task plan")
+SHOW = ("show version", "show status", "show servers", "show inventory", "show playbooks", "show commands", "show repositories", "show repository", "show hosts", "show groups")
 CONFIG = ("help", "show", "end", "exit", "server", "description", "repository add", "repository delete")
 CONFIG_SERVER = ("help", "show", "description", "end", "exit")
 
@@ -28,6 +28,9 @@ COMMANDS = {
     "repository status <name>": "Zmiany plików oraz aktualny commit",
     "repository commit <name> <SHA> <message> <file...>": "Zatwierdź wybrane pliki (bez push)",
     "repository push <name> <SHA>": "Wyślij commit bez force (jawne potwierdzenie SHA)",
+    "show hosts <repo> <inventory>": "Hosty ze statycznego inventory (bez wykonywania Ansible)",
+    "show groups <repo> <inventory>": "Grupy i hosty ze statycznego inventory",
+    "task plan <repo> <inventory> <playbook> <grupa>": "Podgląd celu zadania bez uruchamiania Ansible",
 }
 
 
@@ -93,8 +96,26 @@ def interpret(command: str, mode: str = "exec") -> dict:
         return result("", action="repository-sync", name=args[2])
     if name == "show" and len(args) == 4 and lowered[1] == "repository" and lowered[3] in ("inventory", "playbooks"):
         return result("", action="repository-files", name=args[2], kind=lowered[3])
+    if name == "show" and len(args) in (2, 3) and lowered[1] in ("hosts", "groups"):
+        topic = lowered[1]
+        return result(
+            "Składnia: show " + topic + " <repozytorium> <plik_inventory>\n"
+            "Przykład: show " + topic + " ansible inventory/hosts.ini"
+        )
+    if name == "task" and mode == "exec" and lowered[1:2] == ["plan"] and len(args) < 6:
+        return result(
+            "Składnia: task plan <repozytorium> <plik_inventory> <playbook> <grupa>\n"
+            "Przykład: task plan ansible inventory/hosts.ini "
+            "playbooks/linux-inventory.yml linux"
+        )
+    if name == "task" and len(args) == 6 and lowered[1] == "plan" and mode == "exec":
+        return result("", action="task-plan", name=args[2], inventory=args[3],
+                      playbook=args[4], group=args[5])
+    if name == "show" and len(args) == 4 and lowered[1] in ("hosts", "groups"):
+        return result("", action="inventory-preview", kind=lowered[1],
+                      name=args[2], filename=args[3])
     if name == "show" and len(args) == 1:
-        return result("Dostępne: version, status, servers, inventory, playbooks, commands, repositories, repository")
+        return result("Dostępne: version, status, servers, hosts, groups, inventory, playbooks, commands, repositories, repository")
     if name == "show" and len(args) == 2:
         key = lowered[1]
         if key == "version":
@@ -106,7 +127,7 @@ def interpret(command: str, mode: str = "exec") -> dict:
         if key == "commands":
             return result("\n".join(COMMANDS))
         if key == "servers":
-            return result("Lista serwerów będzie dostępna po parsowaniu inventory.")
+            return result("Hosty i grupy: show hosts <repozytorium> <plik_inventory> lub show groups <repozytorium> <plik_inventory>")
         if key in ("inventory", "playbooks"):
             return result("", action="repo-list", kind=key)
     if name in ("status", "version") and len(args) == 1 and mode == "exec":
