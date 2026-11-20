@@ -76,3 +76,25 @@ class AnsiblePingJob(Base):
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     log: Mapped[str] = mapped_column(String(16384), nullable=False, default="")
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class PreflightReview(Base):
+    """An immutable non-executing assessment and optional admin acknowledgement."""
+    __tablename__ = "preflight_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    repository: Mapped[str] = mapped_column(String(40), nullable=False)
+    inventory: Mapped[str] = mapped_column(String(500), nullable=False)
+    playbook: Mapped[str] = mapped_column(String(500), nullable=False)
+    target_group: Mapped[str] = mapped_column(String(255), nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    git_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+    inventory_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    playbook_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_json: Mapped[str] = mapped_column(String(32000), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+    approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    approved_at: Mapped[str | None] = mapped_column(String(40), nullable=True)

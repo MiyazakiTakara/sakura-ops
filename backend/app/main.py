@@ -187,6 +187,7 @@ from .git_sync import synchronize, list_cached_files, read_repository_file, writ
 from .git_changes import git_status, commit_selected, push_explicit
 from .inventory_preview import preview_inventory
 from .task_plans import task_plan
+from . import preflight
 from .local_jobs import (enqueue, list_jobs, get_job, cancel_job,
                          enabled as local_jobs_enabled, start_worker, stop_worker)
 
@@ -484,6 +485,39 @@ class TaskPlanRequest(BaseModel):
 def preview_task_plan(request: Request, body: TaskPlanRequest):
     require_console_session(request, edit=True)
     return task_plan(body.repository, body.inventory, body.playbook, body.group)
+
+
+class PreflightRequest(TaskPlanRequest):
+    mode: str = Field(default="diagnostic", max_length=20)
+
+
+class PreflightApproval(BaseModel):
+    fingerprint: str = Field(min_length=64, max_length=64)
+
+
+@app.post("/api/preflight/reviews", status_code=201)
+def preflight_create(request: Request, body: PreflightRequest):
+    user = require_console_session(request, edit=True)
+    return preflight.create(body.repository, body.inventory, body.playbook,
+                            body.group, body.mode, user["username"])
+
+
+@app.get("/api/preflight/reviews")
+def preflight_recent(request: Request):
+    require_console_session(request, edit=True)
+    return {"reviews": preflight.recent()}
+
+
+@app.get("/api/preflight/reviews/{review_id}")
+def preflight_get(request: Request, review_id: int):
+    require_console_session(request, edit=True)
+    return preflight.get(review_id)
+
+
+@app.post("/api/preflight/reviews/{review_id}/approve")
+def preflight_approve(request: Request, review_id: int, body: PreflightApproval):
+    user = require_console_session(request, edit=True)
+    return preflight.approve(review_id, body.fingerprint, user["username"])
 
 
 @app.get("/api/jobs")
