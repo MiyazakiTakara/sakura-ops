@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from . import preflight
+from . import preflight, executor_ticket
 
 MAX_RESPONSE = 8192
 
@@ -88,8 +88,12 @@ def submit(review_id):
     if not current["eligible"] or fingerprint != row["fingerprint"]:
         raise HTTPException(409, "Zatwierdzony preflight jest nieaktualny")
     # A dry admission receipt, not a remote task. No file or command is sent.
-    response = exchange({"op": "submit", "sha": current["git_sha"],
-                         "fingerprint": fingerprint, "hosts": current["hosts"]})
+    # The daemon verifies its own copy of the signing key and consumes the
+    # ticket nonce exactly once. No unsigned admission envelope is accepted.
+    approval = executor_ticket.issue(
+        current["git_sha"], fingerprint, current["hosts"], current["mode"],
+        row["approved_by"], executor_ticket.load_key())
+    response = exchange({"op": "submit", "ticket": approval})
     return {"review_id": review_id, "receipt": response, "executable": False}
 
 
