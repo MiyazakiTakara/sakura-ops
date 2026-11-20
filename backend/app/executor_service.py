@@ -45,7 +45,13 @@ class Store:
                 hosts TEXT NOT NULL, state TEXT NOT NULL,
                 created_at TEXT NOT NULL, finished_at TEXT,
                 client_uid INTEGER NOT NULL,
-                nonce TEXT UNIQUE)""")
+                nonce TEXT)""")
+            # A PR #20 database may lack the nonce column. Migrate without
+            # dropping existing receipts; NULL is permitted for old rows.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(receipts)")}
+            if "nonce" not in columns:
+                db.execute("ALTER TABLE receipts ADD COLUMN nonce TEXT")
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS receipts_nonce_unique ON receipts(nonce)")
 
     @contextmanager
     def connect(self):
