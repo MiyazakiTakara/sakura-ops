@@ -24,7 +24,7 @@ MAX_REQUEST = 4096
 MAX_ACTIVE = 10
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-HOST = re.compile(r"[A-Za-z0-9_.:@-]{1,255}\Z")
+HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@-]{0,254}\Z")
 
 
 def timestamp():
