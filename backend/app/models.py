@@ -60,3 +60,19 @@ class SSHDiagnosticJob(Base):
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     log: Mapped[str] = mapped_column(String(16384), nullable=False, default="")
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class AnsiblePingJob(Base):
+    """One-host, builtin Ansible ping diagnostic; never accepts a playbook."""
+    __tablename__ = "ansible_ping_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    alias: Mapped[str] = mapped_column(String(40), nullable=False)
+    address: Mapped[str] = mapped_column(String(45), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+    started_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    finished_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    log: Mapped[str] = mapped_column(String(16384), nullable=False, default="")
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
