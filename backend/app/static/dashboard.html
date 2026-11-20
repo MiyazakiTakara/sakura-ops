@@ -145,10 +145,10 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
     <section class="panel"><h2>Środowisko administracyjne</h2><p>Otwórz Terminal z kapsułki po lewej. Wpisz ? lub help. Polecenie edit notatki.md otwiera edytor bezpiecznych plików roboczych. Zarządzanie serwerami i automatyzacje pojawią się później.</p></section>
    </div>
    <section id="tasks-view" hidden aria-label="Planowanie zadań Ansible">
-    <div class="heading"><h1>Zadania</h1><span class="sub">Planowanie bez wykonania</span></div>
+    <div class="heading"><h1>Zadania</h1><span class="sub">Planowanie i testy lokalne</span></div>
     <div class="panel">
       <h2>Podgląd zadania</h2>
-      <p>Wybierz repozytorium, inventory, playbook i grupę docelową. Nie uruchomimy Ansible ani nie połączymy się z hostami.</p>
+      <p>Wybierz repozytorium, inventory, playbook i grupę docelową. Ten podgląd nie uruchomi playbooka ani nie połączy się z hostami.</p>
       <div class="task-plan-grid">
         <label for="task-repository">Repozytorium</label><select id="task-repository"></select>
         <label for="task-inventory">Inventory</label><select id="task-inventory"></select>
@@ -163,7 +163,7 @@ h1{font-size:22px;font-weight:650;margin:0}.sub{color:var(--muted);font-size:12p
       <div id="task-plan-summary" class="repo-note"></div>
       <h2>Hosty docelowe</h2>
       <div id="task-plan-hosts" class="server-hosts"></div>
-      <p>To podgląd statyczny, nie wynik rzeczywistej ewaluacji Ansible. Uruchamianie zadań nie jest jeszcze dostępne.</p>
+      <p>To podgląd statyczny, nie wynik rzeczywistej ewaluacji Ansible. Wykonywanie playbooków z repozytoriów pozostaje wyłączone.</p>
     </div>
     <div class="panel" id="local-test-panel">
       <h2>Wykonawca — test lokalny</h2>
