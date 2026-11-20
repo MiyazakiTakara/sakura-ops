@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import html
+import json
 import os
 import secrets
 from pathlib import Path
@@ -208,7 +209,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         if user["role"] != "admin":
             raise HTTPException(403, "Inventory wymaga roli administratora")
         heading, paths = discover(result["kind"])
-        result["output"] = heading + ("\\n" + "\\n".join(paths) if paths else "")
+        result["output"] = heading + ("\\n" + "\n".join(paths) if paths else "")
         result.pop("action", None)
     action = result.get("action")
     if action in ("local-test-create", "local-test-list", "local-test-show", "local-test-cancel"):
@@ -226,7 +227,7 @@ def console_execute(request: Request, body: ConsoleCommand):
         elif action == "local-test-show":
             row = get_job(result["job_id"])
             result["output"] = ("Test #" + str(row["id"]) + " — " + row["status"]
-                                + "\\n" + row["log"])
+                                + "\n" + row["log"])
         else:
             row = cancel_job(result["job_id"])
             result["output"] = "Test #" + str(row["id"]) + ": " + row["status"]
@@ -487,9 +488,9 @@ async def jobs_events(request: Request, job_id: int):
             signature = (row["status"], row["log"], row["cancel_requested"])
             if signature != previous:
                 previous = signature
-                yield "event: job-update\\ndata: " + __import__("json").dumps(
+                yield "event: job-update\ndata: " + json.dumps(
                     row, ensure_ascii=False
-                ) + "\\n\\n"
+                ) + "\n\n"
             if row["status"] in ("success", "failed", "cancelled"):
                 return
             await asyncio.sleep(0.5)
