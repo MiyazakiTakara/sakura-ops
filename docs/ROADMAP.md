@@ -2,12 +2,24 @@
 
 SakuraOps is a self-hosted infrastructure management application, independent of Semaphore. Its primary interface is the `skr` administrative command language, available in the web console and, later, as a Linux CLI. A GUI will call the same backend actions.
 
-## Current baseline: v0.1.0-dev
-- Local admin bootstrap with Argon2 password hashes and SQLite.
-- Local login and signed cookie sessions.
-- Authenticated web console with `help`, `status`, `version`; command history and clear.
-- Source on GitHub: `MiyazakiTakara/sakura-ops`; baseline commit `53d86f5`.
-- This is a local development prototype, **not production-ready**. No real Ansible execution or SSO yet.
+## Current implementation status (2026-11-20)
+
+- Local administrator authentication (Argon2, SQLite) and signed sessions.
+- Web console `skr` with restricted commands, history and Tab completion.
+- Git-backed repository configuration, sync, cached inventory and playbooks,
+  file editing, local commits and explicit Git push.
+- Static inventory preview and non-executing task planning.
+- [PR #15](https://github.com/MiyazakiTakara/sakura-ops/pull/15):
+  fixed localhost-only Ansible smoke playbook, persistent queue, live logs,
+  cancellation; manual `localhost` test passed.
+- [PR #16](https://github.com/MiyazakiTakara/sakura-ops/pull/16):
+  allowlisted SSH connectivity diagnostic with separate `sakuraops-diag`
+  identity and host-key verification; Semaphore `172.24.3.181` test passed.
+- [PR #17](https://github.com/MiyazakiTakara/sakura-ops/pull/17):
+  fixed `ansible.builtin.ping` with separate `sakuraops-ping` identity,
+  live logs and history; real Semaphore result `pong`, `changed=false`.
+- This remains a development prototype, **not production-ready**.
+  Neither arbitrary repository playbooks nor production updates are enabled.
 
 ## Principles
 - Local login always remains available; Keycloak SSO is optional.
@@ -72,5 +84,88 @@ SakuraOps is a self-hosted infrastructure management application, independent of
 
 **Acceptance:** installation, recovery, security and functional tests documented and repeatable.
 
-## Next work
-Begin with **v0.1 security tests and hardening**, then implement optional SSO. Preserve the working prototype until these checks pass.
+## Immediate delivery plan — PR #19–22
+
+These milestones form the next development cycle. They can be developed
+during one work session, but must remain separate PRs with distinct
+tests, risk reviews and acceptance gates. The milestone numbers are
+planning labels, not permission to automatically run or merge code.
+
+### PR #19 — Preflight and explicit approval
+
+- Select Git repository, inventory, playbook, target group and requested mode.
+- Pin the exact Git commit SHA and reject changes between planning and approval.
+- Validate static inventory scope, paths, symlinks, syntax and an explicit
+  allowlist of supported modules/operations. Refuse dynamic inventory,
+  unknown plugins and unconstrained variables until separately reviewed.
+- Show a clear report of hosts, intended operations, risk, blockers and
+  authorizing administrator.
+- **Acceptance:** automated negative/security cases pass, and **no remote
+  playbook execution** occurs at this stage.
+
+### PR #20 — Isolated execution service
+
+- Separate execution service as a least-privileged OS user or container;
+  the web API never runs arbitrary shell commands.
+- Pass only validated, approved job data to the execution service.
+- Keep SSH keys and credentials outside Git, frontend and logs; pin host keys.
+- Limit resources, timeout, concurrent execution, cancel behavior, retries
+  and crash recovery, including exclusive locks per target.
+- **Acceptance:** verify isolation, permissions, secret handling and
+  fail-closed behavior before enabling remote execution.
+
+### PR #21 — Approved read-only diagnostic playbooks
+
+- Execute only explicitly reviewed diagnostic playbooks at a pinned SHA.
+- Start with Semaphore and a low-privilege identity without `sudo` or
+  `become`; other hosts remain disabled until separately approved.
+- Candidate diagnostics: OS information, service state, resources and
+  available security updates without installing packages.
+- Treat `--check` as an extra signal, **not a guarantee of no side effects**.
+  Enforce an operation-level allowlist, not just Ansible check mode.
+- **Acceptance:** CI and manual Semaphore QA pass; no configuration changes
+  and no production host access.
+
+### PR #22 — Audit and reporting
+
+- Record actor, approval, timestamp, exact Git SHA, inventory, targets,
+  mode, execution outcome and preflight reference.
+- Preserve per-host results, redact credentials and provide exportable
+  audit reports with retention rules.
+- **Acceptance:** authorization, secret redaction, event integrity and
+  restart/recovery cases are tested.
+
+### PR #23 — Schedules and approved templates
+
+- Timezone-aware recurring tasks with locking, clear failure/retry status.
+- Only previously approved templates may run; scheduling may not bypass
+  preflight or role checks.
+
+### PR #24+ — Carefully controlled production operations
+
+- After separate security and operational sign-off, introduce authorized
+  package updates, service management, configuration deployments and restarts.
+- Require RBAC, approvals, explicit target scope, maintenance windows,
+  audit trail and rollback plans before each category is enabled.
+
+## Development and acceptance rules
+
+1. Keep `main` stable. Work on feature branches with dedicated PRs.
+2. No merge of a newly enabled remote execution mode before manual QA.
+3. Do not include SSH private keys, passwords, tokens or session secrets in Git.
+4. Each milestone needs positive and negative tests (rejections,
+   permissions, cancellation, timeout and restart behavior).
+5. Update this file after each accepted PR with the actual result and link.
+6. Production access must be an explicit, separate approval decision.
+
+## Next action
+
+**Start PR #19: preflight and approval without execution.**
+Do not connect repository playbooks to the remote executor until the
+security isolation and approval gates are implemented.
+
+## Longer-term milestones
+
+The original release milestones below remain as a broader product
+roadmap. They are aspirational and do not imply that optional SSO,
+full container isolation or production automation have already shipped.
