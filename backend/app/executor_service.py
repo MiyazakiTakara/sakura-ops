@@ -17,6 +17,7 @@ import struct
 import threading
 import time
 from datetime import datetime, timezone
+from contextlib import contextmanager
 from pathlib import Path
 
 MAX_REQUEST = 4096
@@ -42,10 +43,15 @@ class Store:
                 created_at TEXT NOT NULL, finished_at TEXT,
                 client_uid INTEGER NOT NULL)""")
 
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=3)
-        db.execute("PRAGMA busy_timeout=3000")
-        return db
+        try:
+            db.execute("PRAGMA busy_timeout=3000")
+            with db:
+                yield db
+        finally:
+            db.close()
 
     @staticmethod
     def dto(row):
