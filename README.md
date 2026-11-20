@@ -10,6 +10,10 @@ Self-hosted infrastructure management platform.
 - CLI command: skr
 - Shared API for CLI and future GUI
 
+## Development roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for delivered features, the gated PR #18–21 plan, and long-term milestones.
+
 ## Technology
 
 - Backend: Python / FastAPI
