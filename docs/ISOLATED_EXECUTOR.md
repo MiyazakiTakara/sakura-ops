@@ -37,6 +37,7 @@ całego repozytorium z sekretami. Wystarczy **jedno sprawdzone źródło**
 ```bash
 sudo install -d -m 0755 -o root -g root /opt/sakuraops-executor
 sudo install -m 0644 -o root -g root backend/app/executor_service.py /opt/sakuraops-executor/executor_service.py
+sudo install -m 0644 -o root -g root backend/app/executor_ticket.py /opt/sakuraops-executor/executor_ticket.py
 ```
 
 Przykładowa usługa wydzielona (zapisz jako osobną jednostkę systemd,
@@ -56,6 +57,7 @@ RuntimeDirectory=sakuraops-exec
 RuntimeDirectoryMode=0750
 StateDirectory=sakuraops-exec
 StateDirectoryMode=0700
+Environment=SAKURAOPS_EXECUTOR_APPROVAL_KEY=/var/lib/sakuraops-exec/approval.key
 ExecStart=/usr/bin/python3 /opt/sakuraops-executor/executor_service.py --socket /run/sakuraops-exec/executor.sock --database /var/lib/sakuraops-exec/receipts.sqlite --api-uid API_UID
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -118,3 +120,61 @@ bilet zatwierdzenia i niezależne sprawdzenie dopuszczonego profilu w demonie.
 Do tego czasu `exec_enabled: false` musi pozostać niezmienne. Nie wolno
 traktować obecnych rekordów `approved` ani `validated` jako pozwolenia
 na uruchomienie polecenia lub playbooka.
+
+
+## PR #21: signed approval admission (breaking change)
+
+**Existing PR #20 service must be stopped before replacing its code.**
+The old raw request `submit {sha, fingerprint, hosts}` is now rejected.
+The new daemon requires `submit {ticket}`, where the ticket is issued only
+after the API rechecks a current, approved preflight. The ticket contains
+a 30-second validity interval, one-time nonce, fixed `builtin-ping`
+diagnostic profile, exact SHA, fingerprint, sorted host aliases, mode,
+and approving administrator. The daemon checks canonical HMAC-SHA256,
+expiry, fields, peer UID and nonce uniqueness. Even a valid ticket
+**only admits metadata**, and `exec_enabled` remains false.
+
+The service key must be **32 cryptographically random bytes**, provisioned
+by an administrator. Generate it once into a root-only temporary file
+outside the repository, install two separately owned 0600 copies,
+and delete the temporary file immediately. Sample for a laboratory machine
+where the API UID is `patryknowicki`:
+
+```bash
+sudo sh -c 'umask 077; head -c 32 /dev/urandom > /root/sakuraops-approval.key'
+sudo install -m 0600 -o sakuraops-exec -g sakuraops-ipc \
+  /root/sakuraops-approval.key /var/lib/sakuraops-exec/approval.key
+sudo install -d -m 0700 -o patryknowicki -g patryknowicki \
+  /home/patryknowicki/.config/sakuraops
+sudo install -m 0600 -o patryknowicki -g patryknowicki \
+  /root/sakuraops-approval.key \
+  /home/patryknowicki/.config/sakuraops/approval.key
+sudo rm -f /root/sakuraops-approval.key
+```
+
+Start the **API** with
+`SAKURAOPS_EXECUTOR_APPROVAL_KEY=/home/patryknowicki/.config/sakuraops/approval.key`.
+The **executor** uses the separately owned copy at
+`/var/lib/sakuraops-exec/approval.key`; set that variable in the
+dedicated systemd unit or in its test process. Neither copy belongs
+in Git, logs, browser local storage or the main SQLite database.
+Keep the signing key away from members of the IPC group, even if they can
+connect to the socket. The API account remains a trusted security boundary:
+compromise of its UID or key may permit forged metadata approval;
+actual remote execution remains disabled.
+
+**Existing receipts are preserved:** on service startup a unique nonce index
+is added to the older SQLite database. Old rows have null nonces and
+are not valid authorization for anything.
+
+Check after restart:
+- `health` returns `exec_enabled: false`;
+- raw unsigned submit gets rejected;
+- invalid/expired/altered tickets get rejected;
+- same signed ticket cannot be submitted a second time even if cancelled;
+- an API-side submit for a blocked or stale preflight is refused;
+- nothing connects to Semaphore and nothing executes Ansible.
+
+**Do not configure Ansible runtime keys or turn on remote jobs in this PR.**
+A separate reviewed execution implementation, resource isolation, host-key
+pinning, and manual Semaphore QA are mandatory before remote diagnostics.
