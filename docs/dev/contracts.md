@@ -28,7 +28,10 @@ Protobuf:
 
 - Field numbers and their types are immutable. Never reuse a number.
 - Removing a field: delete it and add `reserved <number>;` and `reserved "<name>";`.
-- Add new fields in the gaps already left (each message reserves a block for future fields).
+  `reserved` is used ONLY for removed fields; nothing is reserved today. Numbers 2-9 in the
+  envelopes are left free for future envelope-level fields (body cases start at 10), and other
+  messages leave gaps after their last field. This is a convention, not enforced by the schema.
+- Add new fields in those gaps.
 - New `oneof` cases and enum values are additive within a major version. Receivers treat an
   unknown or unset case as a protocol error (fail closed).
 - Any change of meaning, or anything that old receivers cannot ignore, is a new version
@@ -64,6 +67,16 @@ Breaking: `proto-breaking` runs `buf breaking` with rule set FILE against the `p
 While the base ref has no `proto/buf.yaml` (the first PR that adds it) the target prints a note
 and passes, because a new contract has nothing to break. After the first merge it compares for real.
 There is no breaking check for OpenAPI yet.
+
+## npm `overrides` for openapi-typescript
+
+`openapi-typescript` 7.13.0 (latest) declares the peer `typescript ^5.x`, while the frontend uses
+TypeScript 6, so a plain `npm install` fails with ERESOLVE. `frontend/package.json` therefore has
+`"overrides": {"openapi-typescript": {"typescript": "$typescript"}}`, which makes it use the
+project's TypeScript. This is acceptable because the generator is a build-time tool only (it
+ships nothing to users) and its output, `schema.d.ts`, is type-checked by svelte-check in CI
+(`make web-check`) and drift-checked by `make contracts-check`. Remove the override as soon as an
+`openapi-typescript` release declares TypeScript 6 support, then re-run `npm install` and `make contracts`.
 
 ## Cross-language fixtures
 
