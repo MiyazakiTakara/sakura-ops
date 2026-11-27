@@ -1,0 +1,37 @@
+name: Database
+
+# Pull requests only: no push, schedule or manual trigger, no secrets, no deploy.
+# Migrations, roles and readiness against a throwaway PostgreSQL container that
+# the tests start themselves (pinned image digest, random passwords, tmpfs data).
+on:
+  pull_request:
+    branches:
+      - v2/native-agent-blueprint
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  db:
+    name: Migrations and store
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - run: make sqlc-check
+      - name: Unit tests with the race detector (store, migrate, DSN file, migrations)
+        run: go test -race -count=1 ./internal/store/... ./internal/migrate/... ./internal/dsnfile/... ./db/... ./cmd/sakuraops-migrate/...
+      - name: Integration tests (docker, runs db/bootstrap/roles.sql in the container)
+        run: make test-integration
