@@ -17,7 +17,8 @@ No Docker, PostgreSQL or Redis is required at this stage.
 
 Go dev tools are pinned in the separate module `tools/go.mod` (`tool` directives) and
 run as `go tool -modfile=tools/go.mod <tool>`: buf, protoc-gen-go, protoc-gen-go-grpc,
-goose, sqlc, staticcheck, govulncheck. `make tools` prints their versions. goose and sqlc
+goose, sqlc, staticcheck, govulncheck, oasdiff. actionlint lives in its own module
+`tools/actionlint/go.mod` (see `docs/dev/ci.md`). `make tools` prints their versions. goose and sqlc
 are pinned and version-checked only; there are no migrations or queries yet.
 
 gitleaks is installed by `scripts/install-gitleaks.sh` into `bin/tools/` from a pinned
@@ -26,10 +27,10 @@ release after verifying a pinned SHA-256 (`make secrets` calls it).
 ## Everyday commands
 
 ```
-make check        # fmt-check vet staticcheck test proto-check web-install web-check build vuln secrets
+make check        # fmt-check vet staticcheck test proto-check workflow-lint web-install web-check build vuln secrets
 make build        # builds the SPA, embeds it, writes bin/sakuraops-server (stripped)
 make test         # go test -race ./...
-make fuzz-short   # two fuzz targets, 10 s each
+make fuzz-short   # every Fuzz target under cmd/ and internal/, 10 s each
 make web-check    # svelte-check (strict) + prettier --check + vitest
 ```
 
@@ -81,8 +82,14 @@ generated at test time (ECDSA P-256) in memory or `t.TempDir()`; no key material
 committed. `TestClientInSeparateProcess` re-executes the test binary (no shell) as the client.
 Known limits are listed in `docs/dev/spike-results.md` ("Limitations assigned to NEXT-017").
 
+## More developer documents
+
+[`ci.md`](ci.md) (workflows, required checks), [`contracts.md`](contracts.md),
+[`database.md`](database.md), [`compose.md`](compose.md), [`e2e.md`](e2e.md),
+[`supply-chain.md`](supply-chain.md), [`spike-results.md`](spike-results.md).
+
 ## Not here yet (P02 and later)
 
 Docker Compose, PostgreSQL, Goose migrations and sqlc queries, OpenAPI and generated
-clients, Playwright, SBOM and license scanning in CI, fuzzing in CI, chi router, auth,
+clients, Playwright, SBOM and license scanning in CI, chi router, auth,
 real agent protocol, any task execution.

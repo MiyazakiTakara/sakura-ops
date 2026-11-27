@@ -83,3 +83,50 @@ jobs:
           persist-credentials: false
       # Pinned gitleaks release, SHA-256 verified by the script; findings are redacted.
       - run: make secrets
+
+  fuzz:
+    name: Fuzz (short)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      # Every Fuzz target under cmd/ and internal/, 10 s each; any crasher fails the job.
+      - run: make fuzz-short
+      # Crashers are minimised inputs written to testdata/fuzz by the fuzzing engine. Fuzz
+      # inputs are synthetic test data only; no secrets exist in this job.
+      - name: Upload fuzz crashers
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-crashers
+          path: |
+            cmd/**/testdata/fuzz/
+            internal/**/testdata/fuzz/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  workflow-lint:
+    name: Workflow lint and policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+            tools/actionlint/go.sum
+      # actionlint (pinned in tools/actionlint) plus the repository policy test.
+      - run: make workflow-lint

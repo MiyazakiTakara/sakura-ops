@@ -39,3 +39,4 @@ jobs:
       - run: make contracts-check
       - run: make contracts-test
       - run: make proto-breaking-test
+      - run: make openapi-breaking-test

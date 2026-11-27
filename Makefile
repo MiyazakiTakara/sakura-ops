@@ -23,6 +23,8 @@ tools:
 	@echo "sqlc $$($(TOOL) sqlc version)"
 	@$(TOOL) staticcheck -version
 	@$(TOOL) govulncheck -version | head -3
+	@$(TOOL) oasdiff --version
+	@echo "actionlint $$(cd tools/actionlint && $(GO) tool actionlint -version | head -1)"
 
 fmt-check:
 	@out="$$(gofmt -l cmd internal)"; \
@@ -37,10 +39,9 @@ staticcheck:
 test:
 	$(GO) test -race -count=1 $(GOLANG_PKGS)
 
-## fuzz-short: 10 s per fuzz target (about 20 s total).
+## fuzz-short: every Fuzz target found under cmd/ and internal/, 10 s each (scripts/fuzz-short.sh).
 fuzz-short:
-	$(GO) test -run '^$$' -fuzz '^FuzzCleanAssetPath$$' -fuzztime 10s ./internal/httpserver
-	$(GO) test -run '^$$' -fuzz '^FuzzSPAHandlerNeverLeaks$$' -fuzztime 10s ./internal/httpserver
+	GO='$(GO)' ./scripts/fuzz-short.sh 10s
 
 ## vuln: needs network access to the Go vulnerability database.
 vuln:
@@ -76,7 +77,7 @@ secrets:
 	./scripts/install-gitleaks.sh
 	$(GITLEAKS) git --config .gitleaks.toml --redact --no-banner --verbose .
 
-## check: everything CI runs, in one go. Includes `vuln`, which needs network.
-check: fmt-check vet staticcheck test proto-check web-install web-check build vuln secrets
+## check: the main CI checks in one go (see docs/dev/ci.md for the rest). Includes `vuln`, which needs network.
+check: fmt-check vet staticcheck test proto-check workflow-lint web-install web-check build vuln secrets
 
 -include mk/*.mk

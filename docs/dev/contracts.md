@@ -48,10 +48,12 @@ OpenAPI:
 
 ```
 make contracts          # regenerate OpenAPI Go + TS types and the agent proto Go code
-make contracts-check    # contracts + proto-breaking, then fail if git sees any diff in generated paths
+make contracts-check    # contracts + proto-breaking + openapi-breaking, then fail if git sees any diff in generated paths
 make contracts-test     # Go and Vitest contract tests (fixtures validated on both sides)
 make proto-breaking     # buf breaking (FILE) against origin/v2/native-agent-blueprint
 make proto-breaking-test # scripts/proto-breaking_test.sh: fail-closed and post-bootstrap cases
+make openapi-breaking   # oasdiff breaking changes (ERR and WARN fail) against the same base
+make openapi-breaking-test # scripts/openapi-breaking_test.sh: same cases for the OpenAPI document
 ```
 
 `contracts-check` also runs `buf lint` (STANDARD, via `make agent-proto`). Two rules are
@@ -81,7 +83,13 @@ CI checks out with `fetch-depth: 0` so the base ref resolves; no step relies on 
 base without the module (skip + SHA), post-bootstrap compatible change (passes), post-bootstrap
 breaking change (buf fails), and non-commit object / non-git directory / missing tree object
 (fail). It uses the pinned buf from `tools/go.mod` and runs in the contracts workflow.
-There is no breaking check for OpenAPI yet.
+
+`make openapi-breaking` (`scripts/openapi-breaking.sh`, oasdiff pinned in `tools/go.mod`) has the same
+fail-closed structure: an unresolvable base fails, a verified base without
+`api/openapi/sakuraops.v1.yaml` skips and prints the SHA, a spec deleted from the working tree fails, and
+otherwise `oasdiff breaking --fail-on WARN` compares the base copy with the working tree.
+`make openapi-breaking-test` covers these cases in temporary repos. `internal/api/openapi_valid_test.go`
+loads and validates the document with kin-openapi (no external refs) and has a negative case.
 
 ## What the schema does not enforce
 
