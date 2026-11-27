@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: SakuraOps hub HTTP API
+  version: 1.0.0-draft
+  summary: Contract v1, evolving. Documents only what the hub implements today.
+  description: |
+    Contract v1 and still evolving (docs/23-api-contract.md is the planning scope).
+    This file lists ONLY behaviour that the server implements and tests today:
+    liveness (`GET /healthz`) and the reserved `/api` namespace, which answers every
+    request with the error envelope below. Planned endpoints are intentionally absent;
+    they are added together with their implementation, never before.
+servers:
+  - url: /
+    description: Same origin as the web UI.
+tags:
+  - name: system
+    description: Liveness.
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Liveness probe
+      description: |
+        Returns 200 while the process serves HTTP. HEAD is accepted too (same status,
+        no body). Any other method returns 405 with an `Allow` header and the error
+        envelope. Paths below `/healthz/` return 404 with the error envelope.
+      responses:
+        "200":
+          description: The server is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /api/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        description: Any path below the reserved `/api` prefix.
+        schema:
+          type: string
+        allowReserved: true
+    get:
+      tags: [system]
+      operationId: reservedApiNamespace
+      summary: Reserved API namespace (no endpoints yet)
+      description: |
+        Every method on `/api` and `/api/...` currently answers 404 with the error
+        envelope and never falls back to the web UI. Real endpoints under `/api/v1`
+        are added with their implementation.
+      responses:
+        "404":
+          description: No such API endpoint.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  headers:
+    XRequestID:
+      description: Correlation ID, equal to `request_id` in an error body.
+      schema:
+        type: string
+  responses:
+    MethodNotAllowed:
+      description: Method not allowed.
+      headers:
+        Allow:
+          description: Permitted methods.
+          schema:
+            type: string
+        X-Request-ID:
+          $ref: "#/components/headers/XRequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          x-enum-varnames: [HealthStatusOK]
+    Error:
+      description: |
+        Error envelope (docs/23-api-contract.md). Carries no traceback and no
+        cross-scope data. `field_errors` is omitted when no field-level error exists.
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          description: Human-readable text, safe to display.
+        request_id:
+          type: string
+          description: Correlation ID of the request (may be empty if unavailable).
+        field_errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [path, code, message]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: Location of the offending field in the request body.
+        code:
+          type: string
+          minLength: 1
+        message:
+          type: string
