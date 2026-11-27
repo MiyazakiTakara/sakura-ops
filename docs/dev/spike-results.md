@@ -171,6 +171,8 @@ were not scanned: NOT RUN (the license scan is a pre-distribution item for P02).
 
 ## Technology gate status (docs/10-stack.md)
 
+P01 provides feasibility evidence only; the later verification gates remain open as listed below.
+
 Status values are real: PASS means run and passing in this branch, PARTIAL means some sub-checks
 done, NOT RUN means nothing done. "Owner" is where the remainder belongs.
 
@@ -193,7 +195,7 @@ done, NOT RUN means nothing done. "Owner" is where the remainder belongs.
 | 3i. HTTP/2 and ALPN in the target reverse-proxy topology | no proxy used | NOT RUN | NEXT-017 (#28), NEXT-047 (#36) |
 | 4a. Go build for the test architecture; RSS, CPU, size, latency on described hardware | linux/amd64 on one WSL2 laptop, single runs, see sections above | PARTIAL | NEXT-050 |
 | 4b. arm64 build and measurements; target hardware | not built, not measured | NOT RUN | NEXT-050 / NEXT-071 |
-| 5a. CI on pull requests only: go test, race, govulncheck, lint, proto drift, svelte-check, Vitest, build | defined in `.github/workflows/ci.yml` and all commands pass locally; the workflow itself has not been observed running on GitHub at the time of writing | PARTIAL | verify on the PR run |
+| 5a. CI on pull requests only: go test, race, govulncheck, lint, proto drift, svelte-check, Vitest, build | `.github/workflows/ci.yml`; GitHub run [46009364154](https://github.com/MiyazakiTakara/sakura-ops/actions/runs/46009364154), event `pull_request`, head `4a309e4`: jobs Go, Web and embedded build, Secret scan all `success` | PASS | |
 | 5b. Fuzzing in CI, sqlc/OpenAPI drift, Playwright, PostgreSQL integration, SBOM, artefact signing, dependency license scan | not part of P01 CI | NOT RUN | NEXT-005 (#24) |
 | 6. ADR review and acceptance | not done | NOT RUN | owner, after P01 |
 
