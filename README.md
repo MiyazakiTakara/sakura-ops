@@ -2,7 +2,7 @@
 
 **Status: plan projektowy, 27.11.2026.** Nie jest działającą aplikacją ani instrukcją wdrożenia produkcyjnego.
 
-SakuraOps Next to proponowany własny, self-hosted system zarządzania infrastrukturą z centralnym panelem WWW, lekkim agentem instalowanym na serwerach oraz aplikacją administracyjną do nawiązywania zdalnych sesji. W tym wariancie rezygnujemy z Ansible jako zależności wykonawczej. Ansible nie jest potrzebny do konfiguracji, dodawania hostów ani uruchamiania zadań. Ewentualna integracja z istniejącymi playbookami to osobny temat po MVP.
+SakuraOps Next to proponowany własny, self-hosted system zarządzania infrastrukturą z centralnym panelem WWW, lekkim agentem instalowanym na serwerach oraz wbudowanym terminalem WWW. Zakres całej obecnej roadmapy: wyłącznie zarządzane serwery Linux, bez aplikacji desktopowej. W tym wariancie rezygnujemy z Ansible jako zależności wykonawczej. Ansible nie jest potrzebny do konfiguracji, dodawania hostów ani uruchamiania zadań. Ewentualna integracja z istniejącymi playbookami to osobny temat po MVP.
 
 ## Co ma potrafić administrator
 
@@ -11,26 +11,28 @@ SakuraOps Next to proponowany własny, self-hosted system zarządzania infrastru
 - Zobaczyć stan agentów, systemy, podstawowe zasoby, dostępne aktualizacje i problemy.
 - Wybrać gotowe zadanie, serwery, zobaczyć jego skutki i uruchomić je bez pisania skryptu.
 - Zaplanować cykliczne odczyty i kontrolowane czynności administracyjne.
-- Z aplikacji SakuraOps Connect otworzyć autoryzowaną sesję SSH, a w późniejszym etapie również RDP do wspieranych hostów. Nie budujemy własnego protokołu pulpitu zdalnego.
-- Znaleźć historię, wyniki i audyt. Konsola skr jest opcjonalnym interfejsem tego samego API.
+- Otworzyć pływający terminal SakuraOps z promptem `skr >`, pomocą, historią, Tab i trybem konfiguracji, zgodnie z poprzednią iteracją. Terminal jest równorzędny z GUI, nie dodatkiem na koniec.
+- Opcjonalnie otworzyć osobną kartę sesji SSH w tym samym oknie WWW po wdrożeniu i odbiorze modułu dostępu. SSH wymaga niezależnej autoryzacji.
+- Znaleźć historię, wyniki i audyt; edytować i wersjonować definicje zadań w zaawansowanym widoku Git, bez obowiązku używania Git w codziennej obsłudze.
 
 ## Dokumentacja
 
 | Dokument | Zakres |
 | --- | --- |
 | [01. Audyt](docs/01-audit.md) | Stan aktualnego main i PR #22, decyzje co zachować |
-| [02. Produkt i UX](docs/02-product-ux.md) | Ekrany, kreatory, nawigacja, aplikacja Connect |
+| [02. Produkt i UX](docs/02-product-ux.md) | Ekrany, kreatory, nawigacja, pływający terminal |
 | [03. Architektura i bezpieczeństwo](docs/03-architecture.md) | Hub, agent, protokół, zadania, dane, granice zaufania |
 | [04. Katalog zadań](docs/04-task-catalog.md) | Gotowe zadania, parametry, przykładowe przepływy |
 | [05. Instalacja agenta i rejestracja](docs/05-enrollment.md) | Skrypt, certyfikaty, rejestracja, rotacja, usuwanie |
-| [06. Zdalny dostęp](docs/06-remote-access.md) | Connect, SSH, RDP, broker sesji, uprawnienia |
+| [06. Zdalny dostęp](docs/06-remote-access.md) | Sesje SSH w przeglądarce, broker, uprawnienia |
 | [07. Instalacja i eksploatacja](docs/07-operations.md) | Compose, konfiguracja, backup, aktualizacje, awarie |
 | [08. Roadmapa i backlog](docs/08-roadmap.md) | Etapy, zadania, testy, bramki wydania |
+| [09. Terminal i zgodność z poprzednią iteracją](docs/09-terminal.md) | skr, tryby, polecenia, edytor, Git, migracja i testy |
 | [Przykładowy katalog](examples/task-catalog.yaml) | Makiety danych do projektowania, niewykonywalne |
 | [Przykładowa konfiguracja](examples/config.example.yaml) | Proponowane ustawienia bez sekretów |
 
 ## Zasady
 
-GUI jest podstawowym interfejsem, a szczegóły techniczne dostępne na żądanie. Agent nie jest uniwersalną powłoką na polecenie API, wykonuje ograniczone, typowane operacje. Automatyzacja i dostęp interaktywny mają osobne granice zaufania i uprawnienia. Domyślne wdrożenie jest odczytowe; zmiany, restart i zdalne sesje to odrębne możliwości wymagające autoryzacji. Agent jest jawnie instalowaną, widoczną usługą systemową z dokumentacją i możliwością usunięcia. Brak ukrytego dostępu, zbierania danych użytkowników, obchodzenia uwierzytelnienia i automatycznego otwierania portów.
+GUI zapewnia prostą obsługę, a terminal skr jest od początku równorzędnym interfejsem tych samych usług. Szczegóły techniczne są dostępne na żądanie. Nie powstaje aplikacja desktopowa, klient natywny, agent dla Windows ani obsługa innych systemów niż Linux w tej roadmapie. Zwykła przeglądarka na dowolnym systemie może korzystać z panelu. Osobny CLI skr pozostaje opcjonalny dla Linuksa, bez GUI. Agent nie jest uniwersalną powłoką na polecenie API, wykonuje ograniczone, typowane operacje. Automatyzacja i dostęp interaktywny mają osobne granice zaufania i uprawnienia. Domyślne wdrożenie jest odczytowe; zmiany, restart i zdalne sesje to odrębne możliwości wymagające autoryzacji. Agent jest jawnie instalowaną, widoczną usługą systemową z dokumentacją i możliwością usunięcia. Brak ukrytego dostępu, zbierania danych użytkowników, obchodzenia uwierzytelnienia i automatycznego otwierania portów.
 
 Gałąź zawiera wyłącznie dokumentację i przykładowe dane, bez starego kodu. Commit zachowuje rodzica main dla identyfikowalności źródła audytu; nie jest orphan branch w sensie historii Git. Nie scalać mechanicznie z main, ponieważ usunęłoby to stare pliki. Decyzję o przejściu na Next podjąć po odbiorze. Repozytorium jest publiczne: nie publikować realnych adresów infrastruktury, danych klientów, kluczy, tokenów ani produkcyjnych konfiguracji.

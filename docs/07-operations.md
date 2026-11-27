@@ -30,7 +30,7 @@ Awaria huba: agent nie uruchamia autonomicznych nowych operacji ani nie przyjmuj
 
 ## Upgrade centralny i agenta
 
-Release notes, test migracji Alembic, miejsce, backup, wstrzymanie nowych runów i drain, wstrzymaj brokera zgodnie z oknem. Pobranie podpisanych obrazów, migracja, health, smoke localhost i lab agent, kompatybilność protokołu N/N-1 tylko jeśli przetestowana, aktywacja harmonogramów po review. Rollback obrazu tylko gdy schema kompatybilna; inaczej odtworzenie backupu z jawnym RPO i reconciliacją. Nie obiecywać bezprzerwowego upgrade na jednej VM. Agent najpierw ręczny upgrade podpisanym pakietem; centralny upgrade później osobnym ograniczonym helperem i testem canary/recovery. Connect podpisane wydania z aktualizacją przez użytkownika lub politykę zarządzania stacjami, bez ukrytej instalacji.
+Release notes, test migracji Alembic, miejsce, backup, wstrzymanie nowych runów i drain, wstrzymaj brokera zgodnie z oknem. Pobranie podpisanych obrazów, migracja, health, smoke localhost i lab agent, kompatybilność protokołu N/N-1 tylko jeśli przetestowana, aktywacja harmonogramów po review. Rollback obrazu tylko gdy schema kompatybilna; inaczej odtworzenie backupu z jawnym RPO i reconciliacją. Nie obiecywać bezprzerwowego upgrade na jednej VM. Agent najpierw ręczny upgrade podpisanym pakietem; centralny upgrade później osobnym ograniczonym helperem i testem canary/recovery. Panel i terminal aktualizowane razem z kontrolerem; nie ma osobnych wydań klienta desktopowego. SSH gateway ma osobny health check, drain, test revoke i zgodność z wersją UI.
 
 ## Produkcja
 

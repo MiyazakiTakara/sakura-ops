@@ -2,9 +2,9 @@
 
 ## Decyzje techniczne (do zatwierdzenia w ADR)
 
-Propozycja: Go dla małego agenta i brokera połączeń, FastAPI + SQLAlchemy + Alembic dla centralnego API (kontynuacja znanego backendu), PostgreSQL dla trwałych danych, React/TypeScript/Vite dla panelu, Typer dla skr. Connect: proponowany Qt 6/C++ lub cienki natywny klient korzystający z istniejących klientów SSH/RDP; ADR przed rozpoczęciem implementacji, nie rozwijać dwóch wersji. Osobne komponenty z jasno typowanym kontraktem. Nie pinujemy dziś arbitralnie numerów bibliotek: etap 0 sprawdza kompatybilność i ustala lockfile/digest. Jedna VM Docker Compose, bez obowiązkowego Kubernetes, Redis, chmury ani Ansible. Agent Linux jako jawna usługa systemd.
+Propozycja: Go dla małego agenta i brokera połączeń, FastAPI + SQLAlchemy + Alembic dla centralnego API (kontynuacja znanego backendu), PostgreSQL dla trwałych danych, React/TypeScript/Vite dla panelu, Typer dla skr. Terminal WWW: zachować interakcję skr i sprawdzone komponenty emulatora terminala/CodeMirror po przeglądzie licencji i bezpieczeństwa. Późniejszy SSH w przeglądarce przez wydzielony gateway; bez klienta natywnego. Linux jest jedynym zarządzanym OS w obecnej roadmapie. Osobne komponenty z jasno typowanym kontraktem. Nie pinujemy dziś arbitralnie numerów bibliotek: etap 0 sprawdza kompatybilność i ustala lockfile/digest. Jedna VM Docker Compose, bez obowiązkowego Kubernetes, Redis, chmury ani Ansible. Agent Linux jako jawna usługa systemd.
 
-    Panel WWW / skr / Connect
+    Panel WWW / terminal skr / opcjonalny tekstowy CLI
                  | HTTPS
           Reverse proxy / API
                  | transakcyjne dane, policy, podpis planu
@@ -17,14 +17,14 @@ Propozycja: Go dla małego agenta i brokera połączeń, FastAPI + SQLAlchemy + 
                  | lokalne typowane akcje
        Adaptery OS / opcjonalny ograniczony helper
      
-       Connect -> autoryzacja sesji -> osobny SSH/RDP broker
+       Karta SSH WWW -> autoryzacja sesji -> osobny SSH gateway
                  -> dozwolona usługa hosta, normalny login
 
 API nie wykonuje komend OS, nie montuje docker.sock, nie ma klucza CA agenta ani dowolnego dostępu do hostów. Agent Gateway uwierzytelnia wyłącznie urządzenia, nie użytkowników. Dispatcher dostarcza tylko podpisane, zatwierdzone zlecenia. Scheduler tworzy plany w granicach grantów, nie ma kluczy agenta. Osobny signer/issuer z minimalnymi uprawnieniami i ograniczonym protokołem; podpis sam nie chroni przed pełną kompromitacją signera, dlatego agent niezależnie egzekwuje lokalną allowlistę i profile. Broker sesji oddzielony od automatyzacji.
 
 ## Struktura repo
 
-backend/app/{api,auth,hosts,enrollment,catalog,policy,runs,schedules,audit,integrations}, backend/migrations; gateway/ (Go); agent/{cmd,protocol,identity,actions,adapters,journal,policy}; helper/; connect/; frontend/src/{pages,components,api,terminal}; cli/skr; builtin/catalog; scripts/; deployment/; tests/{unit,integration,e2e,security,lab}; docs/. Wspólne wersjonowane schematy protokołu i OpenAPI, generowane typy, testy kontraktu cross-language. Katalog wbudowany z release, nie plik wykonywalny przekazywany przez operatora.
+backend/app/{api,auth,hosts,enrollment,catalog,policy,runs,schedules,audit,integrations}, backend/migrations; gateway/ (Go); agent/{cmd,protocol,identity,actions,adapters,journal,policy}; helper/; ssh-gateway/ (po MVP); frontend/src/{pages,components,api,terminal}; cli/skr; builtin/catalog; scripts/; deployment/; tests/{unit,integration,e2e,security,lab}; docs/. Wspólne wersjonowane schematy protokołu i OpenAPI, generowane typy, testy kontraktu cross-language. Katalog wbudowany z release, nie plik wykonywalny przekazywany przez operatora.
 
 ## Tożsamość i sieć
 
@@ -47,7 +47,7 @@ UUID, UTC w DB, timezone w UI, FK/unique/transakcje, soft retirement, immutable 
 | Plan / Approval | frozen host IDs+versions+capabilities, agent identities, params digest, task digest, actor, policy revision, expiry, risk, approver, maintenance |
 | Run / HostResult / RunEvent | plan ID, per-host command ID, idempotency key, lease, state, timestamps, counters, result kind, error code, seq |
 | Schedule / Occurrence | rule, timezone, owner, grant, target snapshot rule, next_at, status, unique(schedule, scheduled_at) |
-| SessionPolicy / Session / SessionEvent | host/service allowlist, actor, protocol, expiry, start/end, bytes optional, reason, status, revoke; nie hasło SSH/RDP |
+| SessionPolicy / Session / SessionEvent | host/service allowlist, actor, protocol, expiry, start/end, bytes optional, reason, status, revoke; nie hasło SSH |
 | AuditEvent | actor, action, object, reason, time, request_id, plan digest, result; sanitized append-only dla API |
 
 Rejestr hostów w DB jest źródłem prawdy. Opcjonalny statyczny import z inventory/CSV: preview/mapowanie/konflikty, bez importu sekretów i bez uruchamiania pluginów. Import nie instaluje agenta ani nie aktywuje hosta. Eksport sanitized JSON/CSV i opcjonalne prywatne wersjonowanie manifestów później.
@@ -61,7 +61,7 @@ Rejestr hostów w DB jest źródłem prawdy. Opcjonalny statyczny import z inven
 - /schedules (CRUD w granicach grantów), /pause,/resume; /audit.
 - POST /sessions/plan; /sessions/{id}/approve; /sessions/{id}/connect; /sessions/{id}/revoke; GET /sessions (moduł późniejszy).
 
-Każde mutujące API z kontrolą RBAC, zakresu hostów, CSRF przy sesjach, audytem i idempotency. OpenAPI, paginacja cursor, błędy code/message/request_id/field_errors, kody 401/403/409/422/429, brak traceback w UI. SSE sprawdza uprawnienia również po zmianie roli, ogranicza połączenia i pozwala wznowić strumień. SameSite i same-origin domyślnie. Certyfikat urządzenia nie daje dostępu do API użytkownika. API tokeny hashowane, jawne scopes, revocable; desktop/CLI przechowuje tokeny w systemowym store, nie w historii.
+Każde mutujące API z kontrolą RBAC, zakresu hostów, CSRF przy sesjach, audytem i idempotency. OpenAPI, paginacja cursor, błędy code/message/request_id/field_errors, kody 401/403/409/422/429, brak traceback w UI. SSE sprawdza uprawnienia również po zmianie roli, ogranicza połączenia i pozwala wznowić strumień. SameSite i same-origin domyślnie. Certyfikat urządzenia nie daje dostępu do API użytkownika. API tokeny hashowane, jawne scopes, revocable; opcjonalny CLI przechowuje tokeny w systemowym store, nie w historii; przeglądarka używa HttpOnly cookies, nie trwałych bearer tokens w localStorage.
 
 ## RBAC i zgody
 
@@ -90,3 +90,7 @@ Scheduler UTC+IANA timezone, occurrence unique, DST pominięta godzina = skip z 
 ## Zagrożenia i kontrola
 
 Model: nadużycie operatora, kradzież invite/token/klucza, klon agenta, fałszywy kontroler, MITM, replay/TOCTOU, modyfikacja envelope, malicious params, lokalne przejęcie hosta, przejęcie huba, SSRF/pivot przez broker, log XSS, przeciążenie, rozjazd wersji i awaria. Agent nie ufa wynikowi z innego urządzenia i nie autoryzuje się sam do innych hostów. Nie da się uznać danych kompromitowanego hosta za wiarygodne; oznaczyć źródło i czas. Hub nie przyjmuje HTML/logu bez escaping. Redakcja strukturalna i allowlist output fields. Wbudowane zadania bez zbierania treści plików prywatnych, sekretów, keystrokes, ekranów. Audit append-only dla API; lokalny admin DB nadal może go zmienić, opcjonalny niezależny eksport później. Testy bezpieczeństwa osobno dla API, agenta, helpera, CA/rotacji i brokera sesji. Zdalny dostęp nie może być tunelowym obejściem tych ograniczeń.
+
+## Zgodność z poprzednim terminalem i Git
+
+Parser skr i GUI wywołują identyczne usługi aplikacyjne, a kontekst trybu nie jest uprawnieniem. Osobne schematy requestów i transport dla skr, operacji edytora i sesji SSH. Terminal nie przyjmuje dowolnego polecenia OS. Zachować interfejsy repozytoriów Git jako opcjonalny moduł importu i wersjonowania definicji typowanych zadań, nigdy kodu wykonywalnego agenta; osobne uprawnienia, potwierdzony diff, pin SHA, walidacja symlink/path i jawny push. Żaden commit/push nie uruchamia zadań. Szczegóły w 09-terminal.md.

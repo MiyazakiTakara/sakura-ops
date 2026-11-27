@@ -3,8 +3,8 @@
 Identyfikatory NEXT są zadaniami planu, nie utworzonymi GitHub Issues. Realizować małymi PR do dedykowanej gałęzi integracyjnej Next, nie do starego main. Każdy PR: konkretna funkcja, pozytywne i negatywne testy, instrukcja QA, review i aktualizacja dokumentacji. CI na pull_request, brak deploy na push. Nie tworzymy tutaj issues ani automatycznych PR bez osobnego zlecenia.
 
 ## 0. Fundament (NEXT-001..006)
-- 001 ADR: zatwierdzenie modelu agent/hub zamiast Ansible, zakres SSH/RDP, model zagrożeń i granice.
-- 002 ADR stack i licencje, protokół mTLS/WS vs gRPC, signer/issuer, wersje i kompatybilność OS, Connect toolchain.
+- 001 ADR: zatwierdzenie modelu agent/hub zamiast Ansible, zakres Linux-only i terminala WWW, model zagrożeń i granice.
+- 002 ADR stack i licencje, protokół mTLS/WS vs gRPC, signer/issuer, wersje i kompatybilność OS, komponenty terminala WWW i licencje.
 - 003 Monorepo, lockfiles Python/Go/Node, lint/typecheck, .gitignore, secret scanning, minimalny README dev.
 - 004 Compose dev, izolowana sieć lab, health, PostgreSQL migrations od pustej bazy.
 - 005 CI PR: unit, integration, build, security scan, artefakty bez sekretów.
@@ -16,7 +16,7 @@ Odbiór: świeży clone w lab uruchamia health i CI; zero dostępu do zdalnych h
 - 008 RBAC + host-group scope, testy IDOR, scoped tokens, audit login/role changes.
 - 009 Routing Pulpit/Serwery/Zadania/Ustawienia; stany puste/loading/error, bez dead links.
 - 010 Ustawienia instancji (URL, timezone, scope), status usług z rzeczywistych danych.
-- 011 Ograniczony terminal skr, help/history/completion i CLI skeleton, wspólne API.
+- 011 Pływający terminal skr z zachowaniem UI i trybów, help/history/completion, Ctrl+L, edytor i wspólne API (09-terminal.md); minimalne realne komendy zgodne z gotowymi usługami.
 - 012 E2E auth, accessible keyboard/mobile, break-glass docs.
 Odbiór: viewer nie mutuje, inna grupa nie widzi hosta, brak dowolnego shell i brak remote access.
 
@@ -49,7 +49,7 @@ Odbiór: jedno zaproszenie + jedno uruchomienie zweryfikowanego skryptu + niezal
 - 032 Audyt aktualizacji Debian/Ubuntu, potem RHEL/Oracle Linux; cache age/unknown, bez instalacji i refresh.
 - 033 Pulpit Wymaga uwagi, lista, karta, filtry, szybkie akcje, prawdziwe dane i daty.
 - 034 Katalog i wizard, batch results, retry odczytów i eksport sanitized.
-- 035 CLI server/task/run --json i parity uprawnień, help.
+- 035 Parzystość GUI i skr dla server/task/run; opcjonalny tekstowy CLI Linux --json, help, scoped token.
 - 036 UX E2E, keyboard/mobile, lab regression i brak nieautoryzowanych zmian.
 Odbiór MVP: od pustej instalacji do rejestru hostów, diagnostyki, raportu aktualizacji/usług/zasobów. Wszystkie profile modyfikujące i access connector wyłączone.
 
@@ -61,18 +61,18 @@ Odbiór MVP: od pustej instalacji do rejestru hostów, diagnostyki, raportu aktu
 - 041 E2E audytu codziennego i awarii DB/gateway/agent; tylko D0.
 Odbiór: brak nakładających się runów per host i powtórek po awarii, brak bypass RBAC.
 
-## 6. Connect i read-only pilot (NEXT-042..051)
-- 042 Connect ADR, protokół autoryzacji desktop, host key pinning, normalny OS login, privacy/audit model.
-- 043 Windows client: login, lista hostów, search/favorites, systemowy token store.
-- 044 SSH bezpośredni przez istniejącą sieć/VPN, bez shell interpolation, scope, host pin, rozłączenie i błędy.
-- 045 Testy SSH lab, key mismatch, user identity, input injection, token expiry, audyt ograniczeń wariantu A.
-- 046 Podpisane obrazy i release Connect, install.sh, konfiguracja pierwszego startu.
+## 6. SSH w terminalu WWW i read-only pilot (NEXT-042..051)
+- 042 ADR SSH gateway, protokół WSS i grantów, host key pinning, normalny OS login, privacy/audit model.
+- 043 Osobna karta SSH w pływającym terminalu WWW, host/account/status, disconnect, keyboard/resize i accessibility.
+- 044 Wydzielony SSH gateway przez istniejącą sieć administracyjną, host/service allowlist, pin, normalny login, revoke/idle/timeout, bez shell interpolation.
+- 045 Testy SSH lab, key mismatch, user identity, input injection, token expiry, WSS origin, SSRF, revoke i audyt metadanych wariantu A.
+- 046 Podpisane obrazy centralnego systemu i gateway, install.sh, konfiguracja pierwszego startu; bez klienta do instalowania.
 - 047 Reverse proxy/mTLS, backup/restore, retencja, monitorowanie, upgrade/rollback.
 - 048 Opcjonalne OIDC Keycloak z local fallback, test awarii i mappingu.
 - 049 Statyczny import/eksport inventory/CSV bez sekretów i automatycznej aktywacji.
 - 050 Load/reconnect storm tests i limity; ustalenie wspieranych wersji.
 - 051 Pilot odczytowy i SSH wyłącznie na jawnie wybranych hostach, odbiór ownera/security.
-Odbiór: świeża instalacja, backup/restore drill, odczyt i normalna sesja SSH. A nie daje centralnego egzekwowania końca sesji bezpośredniej; nie obiecywać tej funkcji.
+Odbiór: świeża instalacja, backup/restore drill, odczyt i normalna sesja SSH. Gateway egzekwuje zamknięcie sesji w SakuraOps, nie niezależne połączenia SSH ani wcześniej odłączone procesy na hoście.
 
 ## 7. Kontrolowane zmiany (NEXT-052..059)
 - 052 ADR privileged helper, Unix peer credentials, oddzielna lokalna polityka i podpis, brak szerokiego sudo.
@@ -85,8 +85,8 @@ Odbiór: świeża instalacja, backup/restore drill, odczyt i normalna sesja SSH.
 - 059 Odrębny odbiór każdej klasy, włączenie per host/grupa po zgodzie.
 Odbiór: operator nie może uruchomić dowolnego roota; test konkretnej granicy helpera, nie deklaracja oparta tylko na typie formularza.
 
-## 8. Broker sesji, reboot i gotowość operacyjna (NEXT-060..069)
-- 060 ADR relay/access connector: osobna tożsamość, lokalne service IDs, zakres, egress, session lifecycle.
+## 8. Opcjonalny relay SSH, reboot i gotowość operacyjna (NEXT-060..069)
+- 060 Opcjonalny ADR relay/access connector (tylko gdy potrzebny i zatwierdzony): osobna tożsamość, lokalne service IDs, zakres, egress, session lifecycle.
 - 061 Short-lived signed grant, broker/connector, wyłącznie zatwierdzony SSH service, revoke/idle/max duration.
 - 062 Security tests broker: inny host/port, replay, expiry, pivot/SSRF, revoke i log leaks. Nie włączać B przed odbiorem.
 - 063 Reboot jawnie, boot ID/health, unknown, canary/wykluczenia.
@@ -100,14 +100,14 @@ Odbiór: formalny sign-off, restore, sieć, audyt, revocation, rollback procedur
 
 ## 9. Rozszerzenia (NEXT-070..077)
 - 070 Kompozycja zadań z dozwolonych kroków i typed params, bounded DAG, review.
-- 071 Windows agent jako osobny adapter i model usług/aktualizacji; bez parytetu na siłę.
-- 072 RDP Connect do wspieranych systemów, weryfikacja cert/NLA, redirections i scope, osobny security review.
-- 073 Linux/macOS Connect po ustaleniu toolchain i testach.
+- 071 Rozszerzenie macierzy dystrybucji Linux, pakietów i architektur po testach, bez innych OS.
+- 072 Opcjonalny SFTP w przeglądarce przez dozwolony SSH, osobny scope i security review, bez automatyzacji powłoki.
+- 073 Usprawnienia terminala skr i edytora: tabs/workspace, kontekstowy help, ergonomia i regresje.
 - 074 Integracje monitoringu/CMDB, raporty i eksport audytu.
 - 075 Opcjonalne wersjonowanie definicji zadań/import Git, immutable manifests, brak execution on push.
-- 076 Opcjonalna integracja z Ansible lub urządzeniami sieciowymi wyłącznie po osobnej analizie potrzeb, nie zależność rdzenia.
+- 076 Opcjonalna integracja importu danych Ansible dla Linux wyłącznie po osobnej analizie potrzeb, nie zależność wykonawcza rdzenia.
 - 077 Skalowanie wielu stref i HA po pomiarach oraz uzasadnieniu.
-Odbiór osobny per rozszerzenie, bez obietnicy wszystkich platform w MVP.
+Odbiór osobny per rozszerzenie, wyłącznie Linux w obecnej roadmapie.
 
 ## Macierz testów
 
@@ -118,7 +118,7 @@ Odbiór osobny per rozszerzenie, bez obietnicy wszystkich platform w MVP.
 | Agent/security | mTLS, zły CA/cert, klon, replay/TTL, tamper, unsupported action, params injection, nie-root, helper deny, resource pressure, no secrets |
 | Lab | dwa systemy, heartbeat/reconnect, offline, power loss, cancel, partial result, stale cache, local journal dedup |
 | Enrollment | Bats/ShellCheck, verified release, VM install, idempotence, SELinux, expiry, revoke, mismatch, cleanup/uninstall |
-| Remote | prawidłowy SSH, host key mismatch, normalny OS login, scope, token expiry, forbidden port/host, revoke w B, no pivot, no password in logs |
+| Remote | prawidłowy SSH, host key mismatch, normalny OS login, scope, token expiry, forbidden port/host, revoke w gateway i opcjonalnie B, no pivot, no password in logs |
 | UI | login, add server, run wizard, forbidden, empty/error/loading, history, keyboard/mobile, no dead controls |
 | Operations | clean install, upgrade, backup/restore, rotation, reconnect storm, revoked identity reconciliation |
 | Privileged | exact effect, canary fail, postcheck, privilege boundaries, package/service locks, recovery |
@@ -127,12 +127,16 @@ Definition of Done: code review, CI PASS rzeczywiście zweryfikowane, kryteria a
 
 ## Decyzje do akceptacji przed implementacją
 
-- Model agent/hub bez Ansible; czy SSH wystarcza na start, czy RDP ma priorytet po MVP.
+- Model agent/hub bez Ansible; Linux-only, browser-only i terminal skr są ustalone. SSH w przeglądarce jako odrębny moduł po MVP diagnostycznym.
 - Dokładny stack, protokół streaming, issuer/signer, mechanizm rotacji i ograniczenia lokalnego helpera.
-- Czy Connect ma własne okno terminala, czy na start systemowy klient; toolchain Qt/C++ jest propozycją.
+- Konkretny komponent terminala WWW, mechanizm indywidualnego uwierzytelnienia SSH i odrębny gateway podlegają ADR; bez klienta natywnego.
 - Macierz OS/wersji, sieci i limity na podstawie testów, retencja.
 - Czy i kiedy broker sesji za NAT jest naprawdę potrzebny; bezpieczeństwo przed wygodą tunelowania.
 - Procedura przejścia ze starego repo i prywatnych inventory, ewentualne oczyszczenie publicznej historii.
 - Ostateczny design review i jasny motyw dopiero gdy będzie wymagany.
 
 **Pierwszy PR implementacyjny:** NEXT-001..003 (ADR i struktura projektu), następnie lokalny Compose i CI. Nie zaczynać od produkcyjnego agenta root, brokera sesji ani rozbudowanego dashboardu bez działającej ścieżki.
+
+## Bramka zachowania poprzedniej iteracji
+
+NEXT-006/011/012: pływające okno, działające tryby i parser, focus/resize, help, historia, kontekstowy Tab oraz tylko dostępne funkcje. NEXT-014/035: GUI i skr wywołują te same plany i runy. NEXT-049/075: opcjonalna praca z Git (repo, sync, edycja, diff, commit, jawny push), po review; bez wymogu Git dla podstawowego użytkownika. Szczegółowa macierz i testy w 09-terminal.md. Żaden etap nie obejmuje aplikacji desktopowej ani innych zarządzanych OS.

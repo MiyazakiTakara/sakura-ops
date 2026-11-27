@@ -2,7 +2,7 @@
 
 ## Model katalogu
 
-Katalog wbudowany jest dostępny bez Git i pisania kodu. Zadanie odwołuje się do konkretnej wersji typowanej akcji agenta. GUI generuje formularz z walidowanego schema; agent niezależnie waliduje tę samą wersję i lokalną politykę. Nie budujemy własnego ogólnego języka skryptowego. MVP: Linux, Ubuntu/Debian i rodzina RHEL/Oracle Linux po potwierdzeniu macierzy wersji. Windows i urządzenia sieciowe osobne etapy.
+Katalog wbudowany jest dostępny bez Git i pisania kodu. Zadanie odwołuje się do konkretnej wersji typowanej akcji agenta. GUI generuje formularz z walidowanego schema; agent niezależnie waliduje tę samą wersję i lokalną politykę. Nie budujemy własnego ogólnego języka skryptowego. MVP: Linux, Ubuntu/Debian i rodzina RHEL/Oracle Linux po potwierdzeniu macierzy wersji. Inne platformy i urządzenia sieciowe poza zakresem obecnej roadmapy.
 
 Klasy D0 = diagnostyka nie-root; D1 = dodatkowy odczyt uprzywilejowany lub jawna zmiana cache (oznaczyć odrębnie); Z1 = ograniczona zmiana bez planowanego przestoju; Z2 = możliwy przestój/duży wpływ. D0 nie oznacza zerowych śladów: logi, połączenie i odczyty są normalne. D1/Z1/Z2 wyłączone do osobnego odbioru.
 
@@ -51,6 +51,6 @@ TaskVersion: id, version, title, description, platform/capabilities, risk, effec
 2. Nowy host lab-web-01: onboarding, ping, fakty, dysk, dodanie do grupy web-test; tylko D0.
 3. Aktualizacja: wybór security, konkretne serwery, podgląd zależności, drugi akceptujący, canary, health, kontynuacja po sukcesie. Reboot osobno.
 4. Awaria usługi: Sprawdź status, operator stwierdza przyczynę, zatwierdza reload po validate, health. Brak cichej eskalacji do restartu.
-5. Problem wymagający ręcznej diagnostyki: Connect, dozwolony SSH, normalne konto administratora, audyt rozpoczęcia/końca. Nie zamieniać sesji w zadanie automatyczne.
+5. Problem wymagający ręcznej diagnostyki: osobna karta SSH w terminalu WWW, dozwolony SSH, normalne konto administratora, audyt rozpoczęcia/końca. Nie zamieniać sesji w zadanie automatyczne.
 
 Każde zadanie ma test pozytywny, unsupported OS, błędne parametry, offline, timeout, brak uprawnień, replay, brak sekretów w logu; dla zmian dodatkowo partial failure, cancellation/unknown, idempotency, exact effects, recovery. Dla każdego adaptera matryca wspieranych OS/version i fixtures. Niewspierane zadanie oznaczyć w GUI, nie uruchamiać alternatywnej komendy na chybił trafił.

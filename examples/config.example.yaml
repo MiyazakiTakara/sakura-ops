@@ -18,6 +18,10 @@ agent_gateway:
   max_message_bytes: 262144
   # Zaufane CA i klucze w chronionych plikach poza Git.
   client_ca_ref: example-secret-ref
+terminal:
+  skr_enabled: true
+  ssh_web_enabled: false
+  optional_git_enabled: false
 policy:
   privileged_actions_enabled: false
   remote_access_enabled: false

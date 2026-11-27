@@ -15,7 +15,7 @@ Administrator ma wiedzieć: co wymaga uwagi, które serwery są dostępne, jakie
 | Ustawienia | instalacja, użytkownicy, bezpieczeństwo, integracje, kopie | certyfikaty, profile, audyt, limity |
 | Terminal | otwiera okno ograniczonej konsoli skr | historia, Tab, help |
 
-Połączenie zdalne jest akcją na karcie/listach serwerów i w Connect, nie osobnym ekranem konfiguracji sieci dla każdego użytkownika. Nie pokazujemy zakładek nieistniejących ani fałszywych wskaźników. Admin widzi dodatkowe sekcje tylko gdy potrzebne.
+Połączenie zdalne jest akcją na karcie/listach serwerów, otwierającą osobną kartę SSH w pływającym terminalu WWW, dopiero po wdrożeniu i autoryzacji modułu. Nie jest osobnym ekranem konfiguracji sieci. Nie pokazujemy zakładek nieistniejących ani fałszywych wskaźników. Admin widzi dodatkowe sekcje tylko gdy potrzebne.
 
 ## Pulpit
 
@@ -56,23 +56,16 @@ Nagłówek zadania, cele, stan, start/czas trwania, podsumowanie, Anuluj gdy mo�
 
 Kreator: zadanie, cele, kiedy (np. codziennie 07:00, Europe/Warsaw jako konfigurowalny przykład), powiadomienia i włącz. Podgląd trzech kolejnych wystąpień. Domyślnie tylko odczyt. Wstrzymaj/aktywuj, historia i Uruchom teraz z normalnym preflightem. Wygasły grant/zmiana zakresu wyświetla blokadę. Nie nadrabiać lawinowo po awarii.
 
-## SakuraOps Connect (desktop)
+## Terminal SakuraOps (funkcja podstawowa)
 
-Aplikacja dla administratora, proponowany pierwszy klient Windows z późniejszym buildem Linux/macOS. Logowanie do kontrolera, lista dostępnych hostów z grupami, filtrem i ulubionymi; brak własnego drugiego rejestru. Kliknięcie Połącz otwiera kartę SSH albo uruchamia wspierany klient systemowy; rozłączenie widoczne, przyczyna odmowy czytelna. Użytkownik nadal uwierzytelnia się do SSH jako indywidualne konto, nie root/agent. Funkcja RDP później, z normalnym logowaniem do systemu. Nie pokazywać przycisku Pulpit zdalny na hostach bez konfiguracji. Nie przechowywać hasła hosta w centralnym systemie. Mechanizm sesji w 06-remote-access.md.
+Zachowujemy poprzedni zatwierdzony wygląd i zachowanie: pływające okno nad aktualną stroną, drag, resize, minimize, maximize/restore, close, przywracanie fokusu, stan podczas nawigacji, pozycja w granicach widoku. Na telefonie okno wypełnia dostępny obszar. Kapsuła nawigacji otwiera lub przywraca terminal. Prompt `skr >`, historia strzałkami, Tab z podpowiedziami kontekstowymi, Ctrl+L, help/?, tryby exec/config/config-server, show/configure terminal, end/exit. Edytor CodeMirror otwierany przez edit/nano z ograniczonej przestrzeni roboczej; szczegóły w 09-terminal.md. Nie udostępniać fałszywych komend w help i completion. Szczegóły techniczne dostępne na żądanie. GUI i skr operują na tym samym API, planach, zgodach i audycie.
 
-## Konsola skr
+W skr administrator może zobaczyć serwery, grupy, stan, zadania, plan, wyniki, harmonogramy, konfigurację, opcjonalne repozytoria Git. Nie jest to Bash ani dowolny PTY. Przykładowe docelowe komendy: `show servers`, `show server lab-web-01`, `task plan linux.resources --host lab-web-01`, `task run PLAN_ID`, `show job RUN_ID`, `configure terminal`, `server lab-web-01`, `description Serwer testowy`, `end`. Osobny tekstowy CLI dla Linuksa może używać identycznego API później; przeglądarka nie wymaga instalacji klienta.
 
-Pływające okno jak w istniejącym projekcie: drag/resize/minimize/maximize, fokus, stan przy nawigacji, alternatywy klawiaturowe; na telefonie cały obszar. To nie powłoka OS. Przykładowe komendy projektowe:
-- skr server list
-- skr server show lab-web-01
-- skr task list
-- skr run plan linux.resources --host lab-web-01
-- skr run start PLAN_ID
-- skr run show RUN_ID
-- skr run cancel RUN_ID
+## Zdalna sesja SSH w tym samym terminalu (późniejszy moduł)
 
-Prawdziwy CLI używa tego samego API, scoped tokenów i kodów wyjścia, --json. Skr nie omija polityk i nie jest kanałem SSH; Connect to oddzielny interfejs sesji.
+Połącz SSH otwiera nową kartę w tym samym oknie. Karta skr i karta SSH mają jednoznaczne etykiety, różne prompty i ścieżki danych. SSH pokazuje host, konto OS, czas i stan połączenia, ma osobne Rozłącz. Nie zmieniamy po cichu interpretera skr na powłokę hosta. Przełączenie zakładki nie zamyka sesji; zamknięcie okna wymaga decyzji co do sesji SSH. Użytkownik loguje się jako indywidualne konto systemowe, nie agent. Zasady transportu, weryfikacji klucza hosta i sesji w 06-remote-access.md. Bez aplikacji desktopowej; wyłącznie przeglądarka.
 
 ## Dostępność i odbiór
 
-Loading/empty/error/forbidden/stale/retry w odpowiednich widokach; formularze zachowują dane bez sekretów. Widoczny fokus, etykiety, Escape i przywrócenie fokusu, komunikat stanu nie tylko kolorem; WCAG AA 4.5:1 dla zwykłego i 3:1 dla dużego tekstu. Reflow desktop/tablet/mobile, bez globalnego poziomego scrolla, touch targets 44px, reduced motion. Test 360, 768, 1280, 1920 px, 200% zoom i klawiatura. Desktop Connect: reflow okien, klawiatura, high DPI. Każdy przycisk działa lub nie jest pokazywany. Odbiór użytkowy: administrator bez dokumentacji technicznej dodaje host, uruchamia diagnostykę, znajduje wynik, rozpoznaje problem z połączeniem, nawiązuje dozwoloną sesję. To kryteria przyszłego testu, nie wyniki już wykonane.
+Loading/empty/error/forbidden/stale/retry w odpowiednich widokach; formularze zachowują dane bez sekretów. Widoczny fokus, etykiety, Escape i przywrócenie fokusu, komunikat stanu nie tylko kolorem; WCAG AA 4.5:1 dla zwykłego i 3:1 dla dużego tekstu. Reflow desktop/tablet/mobile, bez globalnego poziomego scrolla, touch targets 44px, reduced motion. Test 360, 768, 1280, 1920 px, 200% zoom i klawiatura. Terminal WWW: reflow okna, klawiatura, high DPI, poprawne przewijanie, Unicode i resize PTY tylko dla sesji SSH. Każdy przycisk działa lub nie jest pokazywany. Odbiór użytkowy: administrator bez dokumentacji technicznej dodaje host, uruchamia diagnostykę, znajduje wynik, rozpoznaje problem z połączeniem, nawiązuje dozwoloną sesję. To kryteria przyszłego testu, nie wyniki już wykonane.

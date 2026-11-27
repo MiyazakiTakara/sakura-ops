@@ -2,7 +2,7 @@
 
 ## Cel
 
-Jedno zaproszenie w panelu i jedno uruchomienie zweryfikowanego skryptu na hoście Linux przez administratora. Bez SSH key do automatyzacji, bez Ansible, bez ręcznego YAML, bez nowych portów nasłuchu agenta. Host musi móc dotrzeć do zatwierdzonego kontrolera po HTTPS. Agent jest jawnie instalowaną usługą, widoczną w systemd, z lokalnymi logami i procedurą usunięcia. Podstawowy profil diagnostyczny nie-root. Zdalny SSH/RDP włączany odrębnie.
+Jedno zaproszenie w panelu i jedno uruchomienie zweryfikowanego skryptu na hoście Linux przez administratora. Bez SSH key do automatyzacji, bez Ansible, bez ręcznego YAML, bez nowych portów nasłuchu agenta. Host musi móc dotrzeć do zatwierdzonego kontrolera po HTTPS. Agent jest jawnie instalowaną usługą, widoczną w systemd, z lokalnymi logami i procedurą usunięcia. Podstawowy profil diagnostyczny nie-root. Zdalny SSH w przeglądarce włączany odrębnie. Instalator agenta tylko dla Linux; nie instaluje klienta operatora.
 
 ## Kontrakt skryptu (jeszcze nie zaimplementowany)
 
