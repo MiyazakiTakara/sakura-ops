@@ -1,0 +1,6 @@
+# Extends the default gitleaks rule set. No allowlists: findings must be fixed
+# or explicitly triaged in a reviewed change to this file.
+title = "SakuraOps gitleaks configuration"
+
+[extend]
+useDefault = true

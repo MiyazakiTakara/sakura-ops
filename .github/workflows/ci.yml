@@ -1,0 +1,85 @@
+name: CI
+
+# Pull requests only: no push, schedule or manual trigger, no secrets, no deploy.
+on:
+  pull_request:
+    branches:
+      - v2/native-agent-blueprint
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - run: make tools
+      - run: make fmt-check
+      - run: make vet
+      - run: make staticcheck
+      - run: make test
+      - run: make proto-check
+      - run: make vuln
+
+  web:
+    name: Web and embedded build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - run: make web-install
+      - run: make web-check
+      # Builds the SPA, copies it into the embed directory and compiles the server with it.
+      - run: make build
+      - name: Smoke test the embedded server
+        run: |
+          bin/sakuraops-server -listen 127.0.0.1:18080 &
+          pid=$!
+          trap 'kill "$pid"' EXIT
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:18080/healthz && break
+            sleep 0.2
+          done
+          curl -fsS http://127.0.0.1:18080/healthz | grep -q '"status":"ok"'
+          curl -fsS http://127.0.0.1:18080/spike/terminal | grep -q '<script>'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/unknown)" = 404
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Pinned gitleaks release, SHA-256 verified by the script; findings are redacted.
+      - run: make secrets
