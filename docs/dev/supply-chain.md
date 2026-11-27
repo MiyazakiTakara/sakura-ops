@@ -74,7 +74,11 @@ File: `supply-chain/license-policy.json` (JSON so the checker needs only the sta
   entries: two Go detection artefacts in the contract-test dependencies, where syft reports a file
   it cannot classify as `sha256:<hash>` (kin-openapi `openapi3/license.go`, a source file;
   go-yaml v4 `NOTICE`, Apache-2.0 plus MIT for the libyaml port). Both real licences are
-  allowlisted, and the hash pins the reviewed file. An exception that waives nothing is a **failure** (exit 1), so stale waivers get
+  allowlisted, and the hash pins the reviewed file. Since #50 there are also pgx v5 (Go source
+  file `pgproto3/notice_response.go` misread, MIT, shipped) and three modernc.org modules (libc,
+  memory, sqlite). The modernc modules are in the module graph only through goose's own tests and
+  are never compiled (`go list -deps -test ./...`); the Go SBOM is built from the module graph, so
+  it is broader than the build. The server-binary SBOM is the exact shipped set. An exception that waives nothing is a **failure** (exit 1), so stale waivers get
   removed.
 
 Evaluation (`internal/licensecheck`, unit tested):
