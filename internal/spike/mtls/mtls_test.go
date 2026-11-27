@@ -310,6 +310,29 @@ func TestRevokingClosesOnlyThatClientsStream(t *testing.T) {
 	mustCode(t, err, codes.Unavailable)
 }
 
+func TestRevocationDoesNotLeakReceiveGoroutine(t *testing.T) {
+	h := newHub(t)
+	exited := make(chan struct{}, 1)
+	h.svc.recvDone = func() { exited <- struct{}{} }
+	a := h.deviceCA.client(t, "agent-a")
+	s := openStream(t, h.dial(t, a))
+	if _, err := s.roundTrip(1); err != nil {
+		t.Fatal(err)
+	}
+	// Queue many pings without reading pongs, then revoke while they are in flight.
+	for i := uint64(2); i < 60; i++ {
+		if err := s.s.Send(&spikepb.Ping{Seq: i}); err != nil {
+			break
+		}
+	}
+	h.rev.Revoke(a.serial)
+	select {
+	case <-exited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server receive goroutine did not exit after revocation")
+	}
+}
+
 func TestDeadlineExceeded(t *testing.T) {
 	h := newHub(t)
 	h.svc.echoWait = func(ctx context.Context) { <-ctx.Done() }

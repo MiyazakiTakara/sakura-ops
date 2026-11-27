@@ -51,6 +51,7 @@ type Service struct {
 	// Test hooks (nil in production use).
 	onCall   func(PeerInfo)
 	echoWait func(ctx context.Context)
+	recvDone func() // called when a Connect receive goroutine exits
 }
 
 // NewService returns a Service that terminates streams of revoked certificates.
@@ -92,13 +93,20 @@ func (s *Service) Connect(stream grpc.BidiStreamingServer[spikepb.Ping, spikepb.
 		err  error
 	}
 	// Receiving is done in its own goroutine so a revocation can end the handler
-	// even while Recv blocks. The channel is buffered: after the handler returns
-	// gRPC cancels the stream, Recv fails and the goroutine exits without Send.
+	// even while Recv blocks. When the handler returns gRPC cancels the stream
+	// context, so both Recv and the hand-off below end and the goroutine exits.
 	in := make(chan recv, 1)
 	go func() {
+		if s.recvDone != nil {
+			defer s.recvDone()
+		}
 		for {
 			p, err := stream.Recv()
-			in <- recv{p, err}
+			select {
+			case in <- recv{p, err}:
+			case <-stream.Context().Done():
+				return
+			}
 			if err != nil {
 				return
 			}
