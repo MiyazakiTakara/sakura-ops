@@ -34,6 +34,15 @@ paths:
                 $ref: "#/components/schemas/Health"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
+  /api:
+    get:
+      tags: [system]
+      operationId: reservedApiRoot
+      summary: Reserved API namespace root (no endpoints yet)
+      description: The bare `/api` behaves exactly like `/api/{path}`.
+      responses:
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/{path}:
     parameters:
       - name: path
@@ -42,25 +51,17 @@ paths:
         description: Any path below the reserved `/api` prefix.
         schema:
           type: string
-        allowReserved: true
     get:
       tags: [system]
       operationId: reservedApiNamespace
       summary: Reserved API namespace (no endpoints yet)
       description: |
-        Every method on `/api` and `/api/...` currently answers 404 with the error
+        Every method on `/api/...` (and on the bare `/api`, see above) currently answers 404 with the error
         envelope and never falls back to the web UI. Real endpoints under `/api/v1`
         are added with their implementation.
       responses:
         "404":
-          description: No such API endpoint.
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/XRequestID"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/NotFound"
 components:
   headers:
     XRequestID:
@@ -68,6 +69,15 @@ components:
       schema:
         type: string
   responses:
+    NotFound:
+      description: No such API endpoint.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/XRequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     MethodNotAllowed:
       description: Method not allowed.
       headers:

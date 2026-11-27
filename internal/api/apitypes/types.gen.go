@@ -52,3 +52,7 @@ type HealthStatus string
 // MethodNotAllowed Error envelope (docs/23-api-contract.md). Carries no traceback and no
 // cross-scope data. `field_errors` is omitted when no field-level error exists.
 type MethodNotAllowed = Error
+
+// NotFound Error envelope (docs/23-api-contract.md). Carries no traceback and no
+// cross-scope data. `field_errors` is omitted when no field-level error exists.
+type NotFound = Error

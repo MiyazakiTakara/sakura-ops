@@ -26,6 +26,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reserved API namespace root (no endpoints yet)
+         * @description The bare `/api` behaves exactly like `/api/{path}`.
+         */
+        get: operations["reservedApiRoot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/{path}": {
         parameters: {
             query?: never;
@@ -38,7 +58,7 @@ export interface paths {
         };
         /**
          * Reserved API namespace (no endpoints yet)
-         * @description Every method on `/api` and `/api/...` currently answers 404 with the error
+         * @description Every method on `/api/...` (and on the bare `/api`, see above) currently answers 404 with the error
          *     envelope and never falls back to the web UI. Real endpoints under `/api/v1`
          *     are added with their implementation.
          */
@@ -80,6 +100,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description No such API endpoint. */
+        NotFound: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Method not allowed. */
         MethodNotAllowed: {
             headers: {
@@ -124,6 +154,18 @@ export interface operations {
             405: components["responses"]["MethodNotAllowed"];
         };
     };
+    reservedApiRoot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            404: components["responses"]["NotFound"];
+        };
+    };
     reservedApiNamespace: {
         parameters: {
             query?: never;
@@ -136,16 +178,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No such API endpoint. */
-            404: {
-                headers: {
-                    "X-Request-ID": components["headers"]["XRequestID"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
+            404: components["responses"]["NotFound"];
         };
     };
 }
