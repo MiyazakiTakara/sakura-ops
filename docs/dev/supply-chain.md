@@ -78,7 +78,9 @@ File: `supply-chain/license-policy.json` (JSON so the checker needs only the sta
   file `pgproto3/notice_response.go` misread, MIT, shipped) and three modernc.org modules (libc,
   memory, sqlite). The modernc modules are in the module graph only through goose's own tests and
   are never compiled (`go list -deps -test ./...`); the Go SBOM is built from the module graph, so
-  it is broader than the build. The server-binary SBOM is the exact shipped set. An exception that waives nothing is a **failure** (exit 1), so stale waivers get
+  it is broader than the build. The server-binary SBOM is the exact shipped set. Original licence
+  files, reproduced hashes and the owner approval are recorded in
+  [licence-exceptions.md](licence-exceptions.md). An exception that waives nothing is a **failure** (exit 1), so stale waivers get
   removed.
 
 Evaluation (`internal/licensecheck`, unit tested):
