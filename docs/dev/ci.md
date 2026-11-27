@@ -3,9 +3,12 @@
 Every workflow in `.github/workflows/` runs on `pull_request` targeting
 `v2/native-agent-blueprint` only: no push, schedule, manual trigger or `pull_request_target`, no
 secrets, no deployment, top-level `permissions: contents: read`, every action pinned to a 40-hex
-commit SHA, `persist-credentials: false` on every checkout. `make workflow-policy` enforces this
-(`internal/workflowpolicy`, with negative tests) and `make workflow-lint` runs it together with
-actionlint, so a violating workflow fails the `Workflow lint and policy` job.
+commit SHA, `persist-credentials: false` on every checkout. `make workflow-policy`
+(`internal/workflowpolicy`, with negative tests) enforces the trigger type (`pull_request` only),
+read-only permissions, SHA pins and `persist-credentials: false`; it does not check the target
+branch filter or the absence of `secrets.*` references, which remain review items.
+`make workflow-lint` runs it together with actionlint, so a violating workflow fails the
+`Workflow lint and policy` job.
 
 ## Workflows and jobs
 
