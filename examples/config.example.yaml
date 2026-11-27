@@ -1,0 +1,40 @@
+# Proponowany schemat konfiguracji, nie plik gotowy do wdrożenia.
+instance:
+  name: SakuraOps Lab
+  public_url: https://ops.example
+  timezone: Europe/Warsaw
+authentication:
+  local_enabled: true
+  oidc_enabled: false
+enrollment:
+  enabled: true
+  invite_ttl_seconds: 900
+  independent_fingerprint_confirmation: true
+  allowed_profiles: [diagnostic]
+agent_gateway:
+  require_mtls: true
+  heartbeat_seconds: 30
+  offline_after_seconds: 90
+  max_message_bytes: 262144
+  # Zaufane CA i klucze w chronionych plikach poza Git.
+  client_ca_ref: example-secret-ref
+policy:
+  privileged_actions_enabled: false
+  remote_access_enabled: false
+  remote_relay_enabled: false
+  second_person_for_high_risk: true
+  plan_ttl_seconds: 600
+queue:
+  concurrent_runs: 2
+  diagnostic_parallel_hosts: 5
+  change_parallel_hosts: 1
+scheduler:
+  enabled: false
+  missed_runs: skip
+retention:
+  detail_logs_days: 30
+  results_days: 90
+  audit_days: 365
+notifications:
+  smtp_enabled: false
+# Żadne prawdziwe adresy hostów, klucze, tokeny ani hasła nie należą do tego pliku.
