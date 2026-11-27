@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { onMount, tick, type Snippet } from 'svelte';
 
 	interface Props {
 		title: string;
@@ -12,26 +12,68 @@
 	const STEP = 16;
 	const MIN_W = 280;
 	const MIN_H = 160;
+	// DESIGN.md: below 768 px (phone, or a 200% zoom of a laptop) the terminal uses the whole
+	// available area; moving and resizing are then neither possible nor needed.
+	const COMPACT_QUERY = '(max-width: 767.98px)';
 
 	let x = $state(32);
 	let y = $state(96);
 	let w = $state(640);
 	let h = $state(380);
 	let minimized = $state(false);
+	let compact = $state(false);
+	let root: HTMLElement;
 
+	function boxHeight(): number {
+		return minimized && root ? root.offsetHeight : h;
+	}
+
+	// Keeps the whole window inside the viewport (docs/09-terminal.md).
 	function clampPosition(): void {
-		x = Math.max(0, Math.min(x, window.innerWidth - 80));
-		y = Math.max(0, Math.min(y, window.innerHeight - 40));
+		w = Math.min(w, window.innerWidth);
+		h = Math.min(h, window.innerHeight);
+		x = Math.max(0, Math.min(x, window.innerWidth - w));
+		y = Math.max(0, Math.min(y, window.innerHeight - boxHeight()));
+	}
+
+	let titlebar: HTMLElement;
+
+	// xterm consumes Tab for completion, so Tab cannot leave the terminal. Escape is the keyboard
+	// exit (WCAG 2.1.2): focus moves to the title bar, from where Tab and Shift+Tab continue.
+	// It does not close or minimize the window.
+	function escapeKey(e: KeyboardEvent): void {
+		if (e.key === 'Escape' && e.target !== titlebar) {
+			e.preventDefault();
+			titlebar.focus();
+		}
+	}
+
+	async function toggleMinimized(): Promise<void> {
+		minimized = !minimized;
+		await tick();
+		clampPosition();
 	}
 
 	function setSize(nw: number, nh: number): void {
-		w = Math.max(MIN_W, Math.min(nw, window.innerWidth - x));
-		h = Math.max(MIN_H, Math.min(nh, window.innerHeight - y));
+		w = Math.max(Math.min(MIN_W, window.innerWidth - x), Math.min(nw, window.innerWidth - x));
+		h = Math.max(Math.min(MIN_H, window.innerHeight - y), Math.min(nh, window.innerHeight - y));
 	}
+
+	onMount(() => {
+		const mq = window.matchMedia(COMPACT_QUERY);
+		const sync = (): void => {
+			compact = mq.matches;
+		};
+		sync();
+		clampPosition();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
 
 	let drag: { px: number; py: number; ox: number; oy: number } | null = null;
 
 	function dragStart(e: PointerEvent): void {
+		if (compact) return;
 		if ((e.target as HTMLElement).closest('button')) return;
 		drag = { px: e.clientX, py: e.clientY, ox: x, oy: y };
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -49,6 +91,7 @@
 	let resize: { px: number; py: number; ow: number; oh: number } | null = null;
 
 	function resizeStart(e: PointerEvent): void {
+		if (compact) return;
 		resize = { px: e.clientX, py: e.clientY, ow: w, oh: h };
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
@@ -79,6 +122,7 @@
 		const d = arrowDelta(e);
 		if (!d) return;
 		e.preventDefault();
+		if (compact) return;
 		x += d[0];
 		y += d[1];
 		clampPosition();
@@ -97,14 +141,18 @@
 <section
 	class="window"
 	class:minimized
-	style:left="{x}px"
-	style:top="{y}px"
-	style:width="{w}px"
-	style:height={minimized ? 'auto' : `${h}px`}
+	class:compact
+	bind:this={root}
+	onkeydowncapture={escapeKey}
+	style:left={compact ? '0' : `${x}px`}
+	style:top={compact ? '0' : `${y}px`}
+	style:width={compact ? '100vw' : `${w}px`}
+	style:height={minimized ? 'auto' : compact ? '100dvh' : `${h}px`}
 	aria-label={title}
 >
-	<header
+	<div
 		role="toolbar"
+		bind:this={titlebar}
 		class="titlebar"
 		tabindex="0"
 		aria-label="{title}: window title bar. Arrow keys move the window."
@@ -115,15 +163,15 @@
 		onkeydown={moveKey}
 	>
 		<h2>{title}</h2>
-		<button type="button" onclick={() => (minimized = !minimized)} aria-pressed={minimized}>
+		<button type="button" onclick={toggleMinimized} aria-pressed={minimized}>
 			{minimized ? 'Restore' : 'Minimize'}
 		</button>
 		<button type="button" onclick={onclose}>Close</button>
-	</header>
+	</div>
 	<div class="body" hidden={minimized}>
 		{@render children()}
 	</div>
-	{#if !minimized}
+	{#if !minimized && !compact}
 		<div
 			class="handle"
 			role="slider"
@@ -153,6 +201,10 @@
 		box-shadow: 0 8px 32px rgb(0 0 0 / 50%);
 		overflow: hidden;
 		max-width: 100vw;
+	}
+	.window.compact {
+		border-radius: 0;
+		border-width: 0;
 	}
 	.titlebar {
 		display: flex;

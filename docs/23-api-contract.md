@@ -44,3 +44,5 @@ SSE: event id persisted, event type run.status/host.status/step.status/step.resu
 ## Kontrakty bezpieczeństwa
 
 API i skr używają tych samych services, nie duplikują reguł. Parser komendy nie jest uprawnieniem. CORS same-origin; no CSRF bypass przez content type. Enrollment i agent mają osobne auth i listener, user nie podaje cert identity jako header. SSH grant jednorazowy i bez URL/token logs, autoryzacja host key i OS osobno. Każdy endpoint ma test pozytywny i cross-scope, 401/403/409/422, schema/limits i audit. Nie wystawiać endpointów niezaimplementowanych.
+
+Implemented subset as OpenAPI: `api/openapi/sakuraops.v1.yaml` (see docs/dev/contracts.md).

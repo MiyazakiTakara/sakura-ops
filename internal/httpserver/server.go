@@ -11,6 +11,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/MiyazakiTakara/sakura-ops/internal/api/apitypes"
 )
 
 const immutablePrefix = "_app/immutable/"
@@ -67,7 +69,7 @@ func (s *server) healthz(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, "GET, HEAD")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, apitypes.Health{Status: apitypes.HealthStatusOK})
 }
 
 // apiNotFound answers everything under /api until real endpoints exist. It must

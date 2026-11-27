@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/MiyazakiTakara/sakura-ops/internal/api/apitypes"
 )
 
 const indexHTML = `<!doctype html><html><body><script>boot(1)</script>INDEX</body></html>`
@@ -38,16 +40,16 @@ func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
 	return rec
 }
 
-func decodeErr(t *testing.T, rec *httptest.ResponseRecorder) apiError {
+func decodeErr(t *testing.T, rec *httptest.ResponseRecorder) apitypes.Error {
 	t.Helper()
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Fatalf("content-type = %q, want JSON", ct)
 	}
-	var e apiError
+	var e apitypes.Error
 	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
 		t.Fatalf("body %q is not JSON: %v", rec.Body.String(), err)
 	}
-	if e.Code == "" || e.Message == "" || e.RequestID == "" {
+	if e.Code == "" || e.Message == "" || e.RequestId == "" {
 		t.Fatalf("incomplete error envelope: %+v", e)
 	}
 	return e

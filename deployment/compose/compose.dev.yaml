@@ -1,0 +1,81 @@
+# SakuraOps development stack: PostgreSQL + hub. Lab and developer machines only.
+# No TLS, no migrations (hub does not use the database yet), not a production profile.
+# Usage: make dev-secrets dev-up (see docs/dev/compose.md).
+name: sakuraops-dev
+
+services:
+  postgres:
+    # postgres:18-trixie (PostgreSQL 18, current supported major)
+    image: postgres@sha256:64c8b0d31e4ab6ea665e8426ea406a94bf52de3c05b3a4a8bf713704eefa9328
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sakuraops_admin
+      POSTGRES_DB: sakuraops
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      # PostgreSQL 18 images keep PGDATA below /var/lib/postgresql/18/docker.
+      - pgdata:/var/lib/postgresql
+    networks:
+      - backend
+    # Deliberately no "ports:": the database is reachable only on the internal network.
+    cap_drop:
+      - ALL
+    cap_add: # the image entrypoint starts as root, fixes ownership, then drops to postgres
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sakuraops_admin -d sakuraops -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  hub:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/hub.Dockerfile
+    image: sakuraops-dev-hub:local
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:8080"]
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+      - edge
+    ports:
+      # Loopback only. The host port can be moved (SAKURAOPS_DEV_HUB_PORT) when 8080 is taken.
+      - "127.0.0.1:${SAKURAOPS_DEV_HUB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/sakuraops-server", "-healthcheck", "-listen", "127.0.0.1:8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+networks:
+  # No route outside: postgres and hub only. Postgres is attached to nothing else.
+  backend:
+    internal: true
+  # Carries only the loopback-published hub port.
+  edge: {}
+
+volumes:
+  pgdata: {}
+
+secrets:
+  postgres_password:
+    file: ../../.dev-secrets/postgres_password

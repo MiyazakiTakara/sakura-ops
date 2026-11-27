@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "allowed": [
+    { "id": "MIT" },
+    { "id": "BSD-2-Clause" },
+    { "id": "BSD-3-Clause" },
+    { "id": "Apache-2.0" },
+    { "id": "ISC" },
+    { "id": "0BSD" },
+    { "id": "BlueOak-1.0.0" },
+    { "id": "CC0-1.0" },
+    { "id": "Unlicense" },
+    { "id": "Python-2.0" },
+    { "id": "MPL-2.0", "note": "file-level copyleft; allowed for unmodified third-party use. NOT enforced automatically: any patch, fork or vendored modification of an MPL-licensed package needs manual review and recorded patch provenance (where and how)" }
+  ],
+  "denied_ids": ["SSPL-1.0", "BUSL-1.1", "Commons-Clause", "NOASSERTION", "NONE", "UNKNOWN"],
+  "denied_prefixes": ["GPL-", "AGPL-", "LGPL-", "SSPL-", "BUSL-", "LicenseRef-"],
+  "first_party": ["pkg:golang/github.com/MiyazakiTakara/sakura-ops", "pkg:npm/sakuraops-frontend"],
+  "exceptions": [
+    {
+      "purl": "pkg:golang/github.com/getkin/kin-openapi@v0.153.0",
+      "license": "MIT AND sha256:f03c4ca07f75350cd046bb70344cf31e9ebff3e22bda9be4be92fcd6491715f8",
+      "reason": "Detection artefact. The module LICENSE is MIT. The hashed entry is the Go source file openapi3/license.go (the OpenAPI License object type), which syft misreads as a licence text. Used only by the OpenAPI contract test (internal/api), not linked into the server binary. The hash pins that file, so a changed file needs a new review.",
+      "reviewer": "coordinator review 2026-11-27 (PR #48 stack); owner confirmation requested"
+    },
+    {
+      "purl": "pkg:golang/go.yaml.in/yaml/v4@v4.0.0",
+      "license": "Apache-2.0 AND sha256:257bb2d062ee0b9226e3b5f9c3c5d6aa3d38a450df27a9e060f061d4d4a4eb6f",
+      "reason": "Detection artefact. LICENSE is Apache-2.0. The hashed entry is NOTICE, which states that the files ported from libyaml stay under MIT; the effective licence is Apache-2.0 AND MIT, both allowlisted. Indirect dependency of kin-openapi (contract test only). The hash pins that NOTICE, so a changed file needs a new review.",
+      "reviewer": "coordinator review 2026-11-27 (PR #48 stack); owner confirmation requested"
+    }
+  ]
+}

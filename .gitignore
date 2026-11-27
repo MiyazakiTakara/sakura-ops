@@ -32,3 +32,10 @@ internal/webui/dist/*
 .vscode/
 *.swp
 .DS_Store
+
+# Generated development secrets (docs/dev/compose.md)
+.dev-secrets/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
