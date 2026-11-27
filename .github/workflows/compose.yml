@@ -1,0 +1,36 @@
+name: Compose
+
+# Pull requests only: no push, schedule or manual trigger, no secrets, no deploy.
+# Clean start of the development stack (PostgreSQL + hub) and smoke test.
+on:
+  pull_request:
+    branches:
+      - v2/native-agent-blueprint
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-smoke:
+    name: Compose clean start
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make dev-secrets
+      - run: make dev-up
+      - run: make dev-smoke
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -f deployment/compose/compose.dev.yaml logs --no-color --tail=100
+      - name: Tear down and remove the volume
+        if: always()
+        run: |
+          make dev-down
+          make dev-clean CONFIRM=1
