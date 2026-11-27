@@ -1,0 +1,34 @@
+// NON-NORMATIVE technical spike for NEXT-002. This is NOT the agent protocol:
+// message names and field numbers of the real protocol are decided in NEXT-006
+// and must not be derived from this file.
+syntax = "proto3";
+
+package sakuraops.spike.v1;
+
+option go_package = "github.com/MiyazakiTakara/sakura-ops/internal/spike/mtls/spikepb;spikepb";
+
+service SpikeService {
+  // Echo is a unary call; the response carries the identity the server verified.
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  // Connect is a bidirectional stream: every Ping is answered by a Pong.
+  rpc Connect(stream Ping) returns (stream Pong);
+}
+
+message EchoRequest {
+  bytes payload = 1;
+}
+
+message EchoResponse {
+  uint64 payload_size = 1;
+  // Verified client certificate common name, never a client-supplied value.
+  string peer = 2;
+}
+
+message Ping {
+  uint64 seq = 1;
+}
+
+message Pong {
+  uint64 seq = 1;
+  string peer = 2;
+}
