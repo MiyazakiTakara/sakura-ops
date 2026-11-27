@@ -98,7 +98,7 @@ func TestAPINeverFallsBack(t *testing.T) {
 
 func TestSPAFallback(t *testing.T) {
 	h := testHandler(t)
-	for _, target := range []string{"/", "/hosts", "/hosts/123/edit", "/spike/terminal", "/spike"} {
+	for _, target := range []string{"/", "/hosts", "/hosts/123/edit", "/spike/terminal", "/spike", "/tasks/linux.facts", "/tasks/agent.ping", "/hosts/lab-web-01.example"} {
 		rec := do(h, "GET", target)
 		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "INDEX") {
 			t.Errorf("GET %s = %d %q, want index.html", target, rec.Code, rec.Body.String())
@@ -117,7 +117,7 @@ func TestSPAFallback(t *testing.T) {
 
 func TestMissingAssetsAre404NotHTML(t *testing.T) {
 	h := testHandler(t)
-	for _, target := range []string{"/missing.js", "/_app/immutable/nope.js", "/_app/other", "/_app/", "/favicon.png"} {
+	for _, target := range []string{"/missing.js", "/_app/immutable/nope.js", "/_app/other", "/_app/", "/_app/x", "/favicon.png", "/favicon.ico", "/x.CSS"} {
 		rec := do(h, "GET", target)
 		if rec.Code != 404 || strings.Contains(rec.Body.String(), "INDEX") {
 			t.Errorf("GET %s = %d %q, want JSON 404", target, rec.Code, rec.Body.String())

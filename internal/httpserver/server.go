@@ -81,9 +81,9 @@ func (s *server) spa(w http.ResponseWriter, r *http.Request) {
 	if s.serveFile(w, r, name) {
 		return
 	}
-	// Missing asset (has an extension, or lives under _app/): a real 404, so a
+	// Missing asset (static-asset extension, or lives under _app/): a real 404, so a
 	// failed script/style request never receives HTML.
-	if hasExtension(name) || name == "_app" || strings.HasPrefix(name, "_app/") {
+	if isMissingAsset(name) {
 		writeError(w, http.StatusNotFound, "not_found", "Not found.")
 		return
 	}

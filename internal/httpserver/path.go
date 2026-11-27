@@ -42,7 +42,21 @@ func isReserved(urlPath string) bool {
 	return strings.EqualFold(first, "api") || strings.EqualFold(first, "healthz")
 }
 
-// hasExtension reports whether the last path element looks like a file name.
-func hasExtension(name string) bool {
-	return strings.Contains(path.Base(name), ".")
+// staticExtensions are file extensions that denote a static asset. A missing
+// file with one of these is a real 404. Other dotted last segments (task IDs
+// such as linux.facts, host aliases) are application routes.
+var staticExtensions = map[string]struct{}{
+	".js": {}, ".mjs": {}, ".css": {}, ".map": {}, ".json": {}, ".txt": {},
+	".ico": {}, ".png": {}, ".svg": {}, ".webp": {}, ".jpg": {}, ".woff": {},
+	".woff2": {}, ".webmanifest": {}, ".wasm": {}, ".html": {},
+}
+
+// isMissingAsset reports whether a name that did not resolve to a file must be a
+// 404 instead of the SPA fallback: anything under _app/, or a static-asset extension.
+func isMissingAsset(name string) bool {
+	if name == "_app" || strings.HasPrefix(name, "_app/") {
+		return true
+	}
+	_, ok := staticExtensions[strings.ToLower(path.Ext(name))]
+	return ok
 }
