@@ -8,6 +8,11 @@
 // IMPLEMENTATION (gRPC max message size, explicit validation), not by this schema. A
 // receiver MUST validate every length and count and fail closed on anything unknown.
 //
+// Numbering convention (not enforced by the schema): numbers 2-9 in the envelopes are left
+// free for future envelope-level fields, body cases start at 10, and other messages leave
+// gaps after their last field. `reserved` is used only when a field is REMOVED, never to
+// hold numbers for future use.
+//
 // This schema is not a signature format. Signed bytes are canonical JSON carried opaquely
 // in `bytes` fields; protobuf serialization is never signed.
 syntax = "proto3";
@@ -43,7 +48,6 @@ message AgentMessage {
     CommandResult command_result = 14;
     ProtocolError protocol_error = 15;
   }
-  reserved 2 to 9, 16 to 29;
 }
 
 // HubMessage is the hub -> agent envelope; same fail-closed rule as AgentMessage.
@@ -57,7 +61,6 @@ message HubMessage {
     Drain drain = 14;
     ProtocolError protocol_error = 15;
   }
-  reserved 2 to 9, 16 to 29;
 }
 
 // Hello is the first agent frame. Identity is proven by the client certificate; agent_id
@@ -73,7 +76,6 @@ message Hello {
   repeated string capabilities = 6;
   // Bounded resume summary: commands that the agent still holds (journal or spool).
   repeated ResumeEntry resume = 7;
-  reserved 8 to 19;
 }
 
 message ResumeEntry {
@@ -82,7 +84,6 @@ message ResumeEntry {
   uint64 last_event_seq = 2;
   // True when a final CommandResult is spooled and not yet acknowledged.
   bool result_pending = 3;
-  reserved 4 to 9;
 }
 
 message ServerHello {
@@ -97,7 +98,6 @@ message ServerHello {
   // Maximum frame size in bytes (docs/13: 256 KiB). Enforced by the implementation.
   uint32 max_frame_bytes = 6;
   google.protobuf.Timestamp server_time = 7;
-  reserved 8 to 19;
 
   enum Status {
     STATUS_UNSPECIFIED = 0;
@@ -114,7 +114,6 @@ message Heartbeat {
   // Bounded by the implementation (docs/13); an over-long list is a protocol error.
   repeated string active_command_ids = 4;
   google.protobuf.Timestamp sent_at = 5;
-  reserved 6 to 15;
 }
 
 // CommandOffer delivers one signed command. `envelope` is the canonical JSON that was
@@ -125,7 +124,6 @@ message CommandOffer {
   bytes signature = 2;
   string key_id = 3;
   uint64 epoch = 4;
-  reserved 5 to 15;
 }
 
 message CommandAck {
@@ -133,7 +131,6 @@ message CommandAck {
   Disposition disposition = 2;
   // Stable machine code for a rejection (no secrets, no free text from the host).
   string code = 3;
-  reserved 4 to 15;
 
   enum Disposition {
     DISPOSITION_UNSPECIFIED = 0;
@@ -152,7 +149,6 @@ message CommandEvent {
   bytes metadata = 4;
   string metadata_schema = 5;
   google.protobuf.Timestamp observed_at = 6;
-  reserved 7 to 15;
 }
 
 message CommandResult {
@@ -168,7 +164,6 @@ message CommandResult {
   // blocks further changes until reconciliation (docs/13).
   Effect effect = 6;
   google.protobuf.Timestamp observed_at = 7;
-  reserved 8 to 19;
 
   enum Outcome {
     OUTCOME_UNSPECIFIED = 0;
@@ -194,20 +189,17 @@ message CancelRequest {
   bytes envelope = 1;
   bytes signature = 2;
   string key_id = 3;
-  reserved 4 to 15;
 }
 
 // ResultAck is sent only after the hub has durably stored the result.
 message ResultAck {
   string command_id = 1;
   uint64 highest_committed_seq = 2;
-  reserved 3 to 9;
 }
 
 // Drain: no new offers; finish in-flight work according to local policy.
 message Drain {
   string reason_code = 1;
-  reserved 2 to 9;
 }
 
 // ProtocolError is sent in either direction, without secrets. `correlation_id` identifies
@@ -215,7 +207,6 @@ message Drain {
 message ProtocolError {
   Code code = 1;
   string correlation_id = 2;
-  reserved 3 to 9;
 
   enum Code {
     CODE_UNSPECIFIED = 0;

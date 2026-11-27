@@ -8,6 +8,11 @@
 // IMPLEMENTATION (gRPC max message size, explicit validation), not by this schema. A
 // receiver MUST validate every length and count and fail closed on anything unknown.
 //
+// Numbering convention (not enforced by the schema): numbers 2-9 in the envelopes are left
+// free for future envelope-level fields, body cases start at 10, and other messages leave
+// gaps after their last field. `reserved` is used only when a field is REMOVED, never to
+// hold numbers for future use.
+//
 // This schema is not a signature format. Signed bytes are canonical JSON carried opaquely
 // in `bytes` fields; protobuf serialization is never signed.
 

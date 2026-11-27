@@ -8,6 +8,11 @@
 // IMPLEMENTATION (gRPC max message size, explicit validation), not by this schema. A
 // receiver MUST validate every length and count and fail closed on anything unknown.
 //
+// Numbering convention (not enforced by the schema): numbers 2-9 in the envelopes are left
+// free for future envelope-level fields, body cases start at 10, and other messages leave
+// gaps after their last field. `reserved` is used only when a field is REMOVED, never to
+// hold numbers for future use.
+//
 // This schema is not a signature format. Signed bytes are canonical JSON carried opaquely
 // in `bytes` fields; protobuf serialization is never signed.
 
@@ -1554,7 +1559,7 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\x1esakuraops/agent/v1/agent.proto\x12\x12sakuraops.agent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"=\n" +
 	"\x0fProtocolVersion\x12\x14\n" +
 	"\x05major\x18\x01 \x01(\rR\x05major\x12\x14\n" +
-	"\x05minor\x18\x02 \x01(\rR\x05minor\"\xf7\x03\n" +
+	"\x05minor\x18\x02 \x01(\rR\x05minor\"\xeb\x03\n" +
 	"\fAgentMessage\x12=\n" +
 	"\aversion\x18\x01 \x01(\v2#.sakuraops.agent.v1.ProtocolVersionR\aversion\x121\n" +
 	"\x05hello\x18\n" +
@@ -1565,8 +1570,7 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\rcommand_event\x18\r \x01(\v2 .sakuraops.agent.v1.CommandEventH\x00R\fcommandEvent\x12J\n" +
 	"\x0ecommand_result\x18\x0e \x01(\v2!.sakuraops.agent.v1.CommandResultH\x00R\rcommandResult\x12J\n" +
 	"\x0eprotocol_error\x18\x0f \x01(\v2!.sakuraops.agent.v1.ProtocolErrorH\x00R\rprotocolErrorB\x06\n" +
-	"\x04bodyJ\x04\b\x02\x10\n" +
-	"J\x04\b\x10\x10\x1e\"\xf9\x03\n" +
+	"\x04body\"\xed\x03\n" +
 	"\n" +
 	"HubMessage\x12=\n" +
 	"\aversion\x18\x01 \x01(\v2#.sakuraops.agent.v1.ProtocolVersionR\aversion\x12D\n" +
@@ -1578,8 +1582,7 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"result_ack\x18\r \x01(\v2\x1d.sakuraops.agent.v1.ResultAckH\x00R\tresultAck\x121\n" +
 	"\x05drain\x18\x0e \x01(\v2\x19.sakuraops.agent.v1.DrainH\x00R\x05drain\x12J\n" +
 	"\x0eprotocol_error\x18\x0f \x01(\v2!.sakuraops.agent.v1.ProtocolErrorH\x00R\rprotocolErrorB\x06\n" +
-	"\x04bodyJ\x04\b\x02\x10\n" +
-	"J\x04\b\x10\x10\x1e\"\x91\x02\n" +
+	"\x04body\"\x8b\x02\n" +
 	"\x05Hello\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\x12!\n" +
@@ -1587,13 +1590,12 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\aboot_id\x18\x04 \x01(\tR\x06bootId\x12)\n" +
 	"\x10connection_nonce\x18\x05 \x01(\fR\x0fconnectionNonce\x12\"\n" +
 	"\fcapabilities\x18\x06 \x03(\tR\fcapabilities\x127\n" +
-	"\x06resume\x18\a \x03(\v2\x1f.sakuraops.agent.v1.ResumeEntryR\x06resumeJ\x04\b\b\x10\x14\"\x7f\n" +
+	"\x06resume\x18\a \x03(\v2\x1f.sakuraops.agent.v1.ResumeEntryR\x06resume\"y\n" +
 	"\vResumeEntry\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12$\n" +
 	"\x0elast_event_seq\x18\x02 \x01(\x04R\flastEventSeq\x12%\n" +
-	"\x0eresult_pending\x18\x03 \x01(\bR\rresultPendingJ\x04\b\x04\x10\n" +
-	"\"\xe5\x03\n" +
+	"\x0eresult_pending\x18\x03 \x01(\bR\rresultPending\"\xdf\x03\n" +
 	"\vServerHello\x12>\n" +
 	"\x06status\x18\x01 \x01(\x0e2&.sakuraops.agent.v1.ServerHello.StatusR\x06status\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12C\n" +
@@ -1609,18 +1611,18 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tSTATUS_OK\x10\x01\x12\x1f\n" +
 	"\x1bSTATUS_INCOMPATIBLE_VERSION\x10\x02\x12\x13\n" +
-	"\x0fSTATUS_REJECTED\x10\x03J\x04\b\b\x10\x14\"\xb5\x01\n" +
+	"\x0fSTATUS_REJECTED\x10\x03\"\xaf\x01\n" +
 	"\tHeartbeat\x12\x14\n" +
 	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x17\n" +
 	"\aboot_id\x18\x03 \x01(\tR\x06bootId\x12,\n" +
 	"\x12active_command_ids\x18\x04 \x03(\tR\x10activeCommandIds\x123\n" +
-	"\asent_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAtJ\x04\b\x06\x10\x10\"{\n" +
+	"\asent_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"u\n" +
 	"\fCommandOffer\x12\x1a\n" +
 	"\benvelope\x18\x01 \x01(\fR\benvelope\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\fR\tsignature\x12\x15\n" +
 	"\x06key_id\x18\x03 \x01(\tR\x05keyId\x12\x14\n" +
-	"\x05epoch\x18\x04 \x01(\x04R\x05epochJ\x04\b\x05\x10\x10\"\x8e\x02\n" +
+	"\x05epoch\x18\x04 \x01(\x04R\x05epoch\"\x88\x02\n" +
 	"\n" +
 	"CommandAck\x12\x1d\n" +
 	"\n" +
@@ -1631,7 +1633,7 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\x17DISPOSITION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DISPOSITION_ACCEPTED\x10\x01\x12\x18\n" +
 	"\x14DISPOSITION_REJECTED\x10\x02\x12\x19\n" +
-	"\x15DISPOSITION_DUPLICATE\x10\x03J\x04\b\x04\x10\x10\"\xe6\x01\n" +
+	"\x15DISPOSITION_DUPLICATE\x10\x03\"\xe0\x01\n" +
 	"\fCommandEvent\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12\x1b\n" +
@@ -1640,7 +1642,7 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\bmetadata\x18\x04 \x01(\fR\bmetadata\x12'\n" +
 	"\x0fmetadata_schema\x18\x05 \x01(\tR\x0emetadataSchema\x12;\n" +
 	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAtJ\x04\b\a\x10\x10\"\xd4\x04\n" +
+	"observedAt\"\xce\x04\n" +
 	"\rCommandResult\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x12\x1b\n" +
@@ -1663,20 +1665,18 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\x12EFFECT_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vEFFECT_NONE\x10\x01\x12\x12\n" +
 	"\x0eEFFECT_CHANGED\x10\x02\x12\x12\n" +
-	"\x0eEFFECT_UNKNOWN\x10\x03J\x04\b\b\x10\x14\"f\n" +
+	"\x0eEFFECT_UNKNOWN\x10\x03\"`\n" +
 	"\rCancelRequest\x12\x1a\n" +
 	"\benvelope\x18\x01 \x01(\fR\benvelope\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\fR\tsignature\x12\x15\n" +
-	"\x06key_id\x18\x03 \x01(\tR\x05keyIdJ\x04\b\x04\x10\x10\"d\n" +
+	"\x06key_id\x18\x03 \x01(\tR\x05keyId\"^\n" +
 	"\tResultAck\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tR\tcommandId\x122\n" +
-	"\x15highest_committed_seq\x18\x02 \x01(\x04R\x13highestCommittedSeqJ\x04\b\x03\x10\n" +
-	"\".\n" +
+	"\x15highest_committed_seq\x18\x02 \x01(\x04R\x13highestCommittedSeq\"(\n" +
 	"\x05Drain\x12\x1f\n" +
 	"\vreason_code\x18\x01 \x01(\tR\n" +
-	"reasonCodeJ\x04\b\x02\x10\n" +
-	"\"\xf8\x02\n" +
+	"reasonCode\"\xf2\x02\n" +
 	"\rProtocolError\x12:\n" +
 	"\x04code\x18\x01 \x01(\x0e2&.sakuraops.agent.v1.ProtocolError.CodeR\x04code\x12%\n" +
 	"\x0ecorrelation_id\x18\x02 \x01(\tR\rcorrelationId\"\xfd\x01\n" +
@@ -1690,8 +1690,7 @@ const file_sakuraops_agent_v1_agent_proto_rawDesc = "" +
 	"\x10CODE_STALE_EPOCH\x10\x06\x12\x1a\n" +
 	"\x16CODE_HANDSHAKE_TIMEOUT\x10\a\x12\x15\n" +
 	"\x11CODE_RATE_LIMITED\x10\b\x12\x11\n" +
-	"\rCODE_INTERNAL\x10\tJ\x04\b\x03\x10\n" +
-	"2[\n" +
+	"\rCODE_INTERNAL\x10\t2[\n" +
 	"\bAgentHub\x12O\n" +
 	"\aConnect\x12 .sakuraops.agent.v1.AgentMessage\x1a\x1e.sakuraops.agent.v1.HubMessage(\x010\x01BJZHgithub.com/MiyazakiTakara/sakura-ops/internal/agentproto/agentv1;agentv1b\x06proto3"
 
