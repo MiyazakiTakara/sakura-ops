@@ -42,25 +42,37 @@ scanned (they are the same projects as the installed variants, e.g. lightningcss
 The CI job uploads `bin/sbom/*.cdx.json` as the artifact `sbom-cyclonedx`, retention 7 days. The
 SBOMs list package names, versions and licences only.
 
-The Go dev tools in `tools/go.mod` (buf, sqlc, goose, staticcheck, govulncheck, plugins) are not
-shipped, not scanned for licences and not part of the SBOMs. They are covered by govulncheck only
-as far as `make vuln` analyses the main module. Scanning them is a follow-up if they ever ship.
-
 ## Licence policy
 
 File: `supply-chain/license-policy.json` (JSON so the checker needs only the standard library).
 
 - `allowed`: explicit SPDX identifiers (MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, 0BSD,
   BlueOak-1.0.0, CC0-1.0, Unlicense, Python-2.0, MPL-2.0). MPL-2.0 is allowed for unmodified
-  third-party use only: no patched or forked copy of an MPL file in this repository. Today it
-  appears only in the dev tree (lightningcss, a build tool).
+  third-party use. **This restriction is not enforced automatically**: the checker only sees an
+  SPDX identifier and cannot tell whether a package was patched. Any patch, fork or vendored
+  modification of an MPL-licensed package needs a manual review and recorded patch provenance
+  (where the modified copy lives and how it differs from upstream) in the pull request that
+  introduces it. Today MPL-2.0 appears only in the dev tree (lightningcss, a build tool).
 - `denied_ids` and `denied_prefixes`: `GPL-*`, `AGPL-*`, `LGPL-*`, `SSPL-*`, `BUSL-*`,
   Commons Clause, `LicenseRef-*`, `NOASSERTION`, `NONE`, `UNKNOWN`. The deny list wins over the
   allowlist; a file that lists the same identifier in both is rejected at load time. LGPL is
   denied by default; it is allowed only through a reviewed exception.
-- `first_party`: names of this repository's own modules, skipped by the check.
-- `exceptions`: exact `package` + `version` waivers, each with `reason` and `reviewer`. The list is
-  empty. An exception that matches nothing is reported as a warning so stale entries get removed.
+- `first_party`: versionless package URLs (`pkg:golang/github.com/MiyazakiTakara/sakura-ops`,
+  `pkg:npm/sakuraops-frontend`) of this repository's own modules. A component is skipped only when
+  its `purl`, without version, qualifiers and subpath, equals an entry exactly. The ecosystem is
+  part of the identity, a name prefix does not match, and a component without a `purl` is never
+  first-party. Components nested under a skipped component are still evaluated. Residual limit:
+  a registry package with the identical purl is indistinguishable from the first-party one.
+- `exceptions`: waivers of exactly one package URL for exactly one licence, each with `reason` and
+  `reviewer`. Fields: `purl` (full, with type, name and version, e.g. `pkg:npm/foo@1.2.3`),
+  `license` (the exact licence string being waived, as printed in the per-licence count of the
+  run, compared after trimming and collapsing whitespace; case-sensitive), `reason`, `reviewer`.
+  An exception applies only if the component's `purl` equals the exception `purl` exactly and its
+  evaluated licence equals `license`; a different version, ecosystem or licence is still a finding
+  and a component without a `purl` can never be waived. The policy is rejected at load for a
+  missing field, a versionless or non-purl `purl`, a duplicate `purl` and unknown fields. The list
+  is empty. An exception that waives nothing is a **failure** (exit 1), so stale waivers get
+  removed.
 
 Evaluation (`internal/licensecheck`, unit tested):
 
@@ -71,7 +83,15 @@ Evaluation (`internal/licensecheck`, unit tested):
 - Several licence entries on one component are all required (joined with `AND`).
 - A component with no licence, a free-text licence name, an unparseable expression or an identifier
   that is neither allowed nor denied fails as unknown or unlisted. Nothing unknown passes.
-- A SBOM with no components fails, so a broken scan cannot pass silently.
+- Nested `components[].components[]` and the children of `metadata.component` are evaluated
+  recursively (depth limit 32). The root `metadata.component` itself is not a dependency and is
+  not counted. `file` entries and first-party entries are skipped but never hide their children.
+- An SBOM that yields zero evaluated components (empty, or only `file` and first-party entries)
+  is an error (exit 2), for every SBOM passed, so a broken scan cannot pass silently. All four
+  SBOMs from `scripts/sbom.sh` are dependency-bearing; there is no opt-out.
+
+Exit codes of `cmd/licensecheck`: 0 pass; 1 findings or unused exceptions; 2 usage, policy or SBOM
+error.
 
 Offenders are printed as `package`, `version`, `licence`, reason and SBOM file. The run also
 prints a count per licence.
@@ -82,9 +102,10 @@ Open a pull request that edits `supply-chain/license-policy.json`:
 
 1. For a new allowed identifier: explain why it is compatible with distribution of a self-hosted,
    browser-delivered product, and whether it is copyleft; the owner must approve.
-2. For an exception: add `package`, exact `version`, `reason` (what the licence really is, where
-   the dependency is used, why it cannot be avoided) and `reviewer`. Exceptions are per version,
-   so an upgrade needs a new review.
+2. For an exception: add the full `purl` with version, the exact `license` string, `reason` (what
+   the licence really is, where the dependency is used, why it cannot be avoided) and `reviewer`.
+   Exceptions are per version and per licence, so an upgrade or a licence change needs a new
+   review. Remove the entry when the dependency goes away.
 3. A deny-list change needs the owner's explicit approval.
 
 Nothing in the policy is relaxed to make a test pass; a failing scan means fix the dependency or
@@ -106,6 +127,29 @@ get a reviewed exception.
   repository setting for the owner; tracked in #24. Until then, the licence policy over the SBOM,
   `npm audit` and govulncheck above are the enforced checks.
 
+## Coverage and limitations
+
+Covered:
+
+- Go main module dependencies (`go.mod`) and the built `bin/sakuraops-server` (linux/amd64, the
+  runner and developer platform).
+- The npm tree from `frontend/package-lock.json`, production and production plus dev, as installed
+  on the runner.
+
+Not covered:
+
+- The Go tools module `tools/go.mod` (buf, sqlc, goose, staticcheck, govulncheck, plugins): not
+  shipped, not in the SBOMs, no licence scan. Scanning it is a follow-up if it ever ships.
+- Other OS and architecture builds. The binary SBOM describes the linux/amd64 build only, and npm
+  optional packages for other platforms are in the lockfile but not installed, so not scanned.
+- Container base images and system packages: no images exist yet; tracked separately, to be added
+  with the Compose and Docker images.
+- Accuracy of licence data: it depends on package metadata and on syft's `LICENSE` detection for
+  Go modules; the policy does not prove the identifier is correct.
+- MPL-2.0 modification checks (manual review, see above).
+- GitHub `dependency-review-action` is **not active**: the repository dependency graph is
+  disabled. It stays tracked in issue #24 until the graph is enabled and the check passes.
+
 ## Out of scope here
 
 - Release signing, provenance and attestations of release artefacts: NEXT-024 and NEXT-046,
@@ -116,6 +160,5 @@ get a reviewed exception.
 - Reading and legally reviewing the licence texts of the transitive tree. The policy trusts the
   SPDX identifier that the package metadata or syft's `LICENSE` detection reports; it does not
   prove that identifier is correct.
-- Licence and vulnerability scanning of `tools/go.mod` (dev tools, not shipped).
 - PostgreSQL client libraries: checked automatically once they enter `go.mod`; nothing is added
   to the policy for them in advance.

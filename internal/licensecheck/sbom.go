@@ -10,15 +10,26 @@ import (
 )
 
 type bom struct {
-	BOMFormat  string      `json:"bomFormat"`
+	BOMFormat string `json:"bomFormat"`
+	Metadata  struct {
+		// The root component is not a dependency and is never counted, but
+		// components nested under it are.
+		Component *component `json:"component"`
+	} `json:"metadata"`
 	Components []component `json:"components"`
 }
+
+// maxDepth bounds nested components so a hostile document cannot recurse deeply.
+const maxDepth = 32
 
 type component struct {
 	Type     string         `json:"type"`
 	Name     string         `json:"name"`
 	Version  string         `json:"version"`
+	PURL     string         `json:"purl"`
 	Licenses []licenseEntry `json:"licenses"`
+
+	Components []component `json:"components"`
 }
 
 type licenseEntry struct {
@@ -34,6 +45,7 @@ type Finding struct {
 	SBOM    string
 	Package string
 	Version string
+	PURL    string
 	Licence string
 	Reason  string
 }
@@ -43,9 +55,12 @@ type Result struct {
 	Checked   int            // components evaluated
 	Counts    map[string]int // licence string -> components (all SBOMs, duplicates counted once per SBOM)
 	Findings  []Finding
-	Excepted  []string // package@version waived by an exception
-	Unusedexc []string // exceptions in the policy that matched nothing
+	Excepted  []string // purls waived by an exception
+	Unusedexc []string // exception purls that waived nothing; a failure
 }
+
+// OK reports whether the run passes: no findings and no stale exceptions.
+func (r *Result) OK() bool { return len(r.Findings) == 0 && len(r.Unusedexc) == 0 }
 
 // Check reads CycloneDX JSON files and evaluates every library component.
 func (p *Policy) Check(paths []string) (*Result, error) {
@@ -80,37 +95,71 @@ func (p *Policy) checkOne(r io.Reader, name string, res *Result, used map[string
 	if b.BOMFormat != "CycloneDX" {
 		return fmt.Errorf("not a CycloneDX document (bomFormat=%q)", b.BOMFormat)
 	}
-	if len(b.Components) == 0 {
-		return fmt.Errorf("SBOM has no components; refusing to pass an empty scan")
+	before := res.Checked
+	if b.Metadata.Component != nil {
+		if err := p.walk(b.Metadata.Component.Components, 1, name, res, used); err != nil {
+			return err
+		}
 	}
-	for _, c := range b.Components {
-		if c.Type == "file" || p.firstParty[c.Name] {
-			continue
-		}
-		res.Checked++
-		lic, expr := licenceString(c)
-		res.Counts[lic]++
-		key := c.Name + "@" + c.Version
-		var v Verdict
-		var reason string
-		if expr == "" {
-			v, reason = Unlisted, "no licence declared (unknown)"
-		} else if ev, err := p.EvalExpression(expr); err != nil {
-			v, reason = Unlisted, "unparseable licence: "+err.Error()
-		} else {
-			v, reason = ev, ev.String()
-		}
-		if v == Allow {
-			continue
-		}
-		if _, ok := p.exceptions[key]; ok {
-			used[key] = true
-			res.Excepted = append(res.Excepted, key)
-			continue
-		}
-		res.Findings = append(res.Findings, Finding{name, c.Name, c.Version, lic, reason})
+	if err := p.walk(b.Components, 1, name, res, used); err != nil {
+		return err
+	}
+	if res.Checked == before {
+		return fmt.Errorf("SBOM yielded zero evaluated components (empty, or only file and first-party entries); refusing to pass an empty scan")
 	}
 	return nil
+}
+
+// isFirstParty matches by package URL only: the purl without version must
+// equal a first_party entry, so the ecosystem is part of the identity and a
+// third-party package that merely shares a name cannot be skipped. Components
+// without a purl are never first-party.
+func (p *Policy) isFirstParty(c component) bool {
+	base := purlBase(c.PURL)
+	return base != "" && p.firstParty[base]
+}
+
+// walk evaluates every component and all components nested under it. File
+// entries and first-party entries are skipped themselves, but their children
+// are still evaluated so nothing can be hidden under them.
+func (p *Policy) walk(cs []component, depth int, name string, res *Result, used map[string]bool) error {
+	if depth > maxDepth {
+		return fmt.Errorf("components nested deeper than %d levels", maxDepth)
+	}
+	for _, c := range cs {
+		if c.Type != "file" && !p.isFirstParty(c) {
+			p.evaluate(c, name, res, used)
+		}
+		if err := p.walk(c.Components, depth+1, name, res, used); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Policy) evaluate(c component, name string, res *Result, used map[string]bool) {
+	res.Checked++
+	lic, expr := licenceString(c)
+	res.Counts[lic]++
+	var v Verdict
+	var reason string
+	if expr == "" {
+		v, reason = Unlisted, "no licence declared (unknown)"
+	} else if ev, err := p.EvalExpression(expr); err != nil {
+		v, reason = Unlisted, "unparseable licence: "+err.Error()
+	} else {
+		v, reason = ev, ev.String()
+	}
+	if v == Allow {
+		return
+	}
+	purl := strings.TrimSpace(c.PURL)
+	if e, ok := p.exceptions[purl]; ok && purl != "" && e.Licence == normLicence(lic) {
+		used[purl] = true
+		res.Excepted = append(res.Excepted, purl)
+		return
+	}
+	res.Findings = append(res.Findings, Finding{name, c.Name, c.Version, purl, lic, reason})
 }
 
 // licenceString renders the declared licences and the expression that is

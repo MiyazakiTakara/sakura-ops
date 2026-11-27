@@ -17,11 +17,13 @@ type Allowed struct {
 	Note string `json:"note,omitempty"`
 }
 
-// Exception is a reviewed, exact package@version waiver.
+// Exception is a reviewed waiver of one exact package URL (type, name and
+// version) for one exact licence expression. It never waives anything else:
+// a different version, ecosystem or licence is still a finding, and a
+// component without a purl can never be waived.
 type Exception struct {
-	Package  string `json:"package"`
-	Version  string `json:"version"`
-	Licence  string `json:"license,omitempty"`
+	PURL     string `json:"purl"`
+	Licence  string `json:"license"`
 	Reason   string `json:"reason"`
 	Reviewer string `json:"reviewer"`
 }
@@ -37,7 +39,7 @@ type Policy struct {
 
 	allowed    map[string]bool
 	denied     map[string]bool
-	firstParty map[string]bool
+	firstParty map[string]bool // purl without version
 	exceptions map[string]Exception
 }
 
@@ -80,14 +82,26 @@ func ParsePolicy(r io.Reader) (*Policy, error) {
 	}
 	p.firstParty = map[string]bool{}
 	for _, n := range p.FirstParty {
+		n = strings.TrimSpace(n)
+		if !strings.HasPrefix(n, "pkg:") || len(n) == len("pkg:") || strings.ContainsAny(n, "@?#") {
+			return nil, fmt.Errorf("policy: first_party %q must be a versionless package URL such as pkg:npm/name", n)
+		}
 		p.firstParty[n] = true
 	}
 	p.exceptions = map[string]Exception{}
 	for _, e := range p.Exceptions {
-		if e.Package == "" || e.Version == "" || e.Reason == "" || e.Reviewer == "" {
-			return nil, fmt.Errorf("policy: exception %q needs package, version, reason and reviewer", e.Package)
+		e.PURL = strings.TrimSpace(e.PURL)
+		e.Licence = normLicence(e.Licence)
+		if e.PURL == "" || e.Licence == "" || strings.TrimSpace(e.Reason) == "" || strings.TrimSpace(e.Reviewer) == "" {
+			return nil, fmt.Errorf("policy: exception %q needs purl, license, reason and reviewer", e.PURL)
 		}
-		p.exceptions[e.Package+"@"+e.Version] = e
+		if !purlHasVersion(e.PURL) {
+			return nil, fmt.Errorf("policy: exception purl %q must be a full package URL with type, name and version", e.PURL)
+		}
+		if _, dup := p.exceptions[e.PURL]; dup {
+			return nil, fmt.Errorf("policy: duplicate exception for %q", e.PURL)
+		}
+		p.exceptions[e.PURL] = e
 	}
 	return &p, nil
 }
@@ -99,4 +113,43 @@ func (p *Policy) deniedByPrefix(id string) bool {
 		}
 	}
 	return false
+}
+
+// normLicence is the normalization applied to both sides of an exception
+// licence comparison: surrounding whitespace is trimmed and inner whitespace
+// runs collapse to one space. Comparison is otherwise exact and case-sensitive.
+func normLicence(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// purlHasVersion reports whether s looks like pkg:type/name@version with a
+// non-empty type, name and version. Qualifiers and subpath are not parsed; the
+// whole string is compared verbatim.
+func purlHasVersion(s string) bool {
+	rest, ok := strings.CutPrefix(s, "pkg:")
+	if !ok {
+		return false
+	}
+	if i := strings.IndexAny(rest, "?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	at := strings.LastIndex(rest, "@")
+	if at <= 0 || at == len(rest)-1 {
+		return false
+	}
+	typ, name, ok := strings.Cut(rest[:at], "/")
+	return ok && typ != "" && name != ""
+}
+
+// purlBase returns the purl without version, qualifiers and subpath, or "" if
+// s is not a package URL.
+func purlBase(s string) string {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(s), "pkg:")
+	if !ok {
+		return ""
+	}
+	if i := strings.IndexAny(rest, "@?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	return "pkg:" + rest
 }
