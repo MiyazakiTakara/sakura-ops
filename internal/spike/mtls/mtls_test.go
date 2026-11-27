@@ -168,10 +168,9 @@ func TestRejectedConnections(t *testing.T) {
 		name   string
 		client func(h *hub, t *testing.T) issued
 		// optional overrides
-		roots   func(h *hub) *x509.CertPool
-		srvName string
-		srvDNS  string
-		maxVer  uint16
+		roots  func(h *hub) *x509.CertPool
+		srvDNS string
+		maxVer uint16
 	}
 	cases := []tc{
 		{name: "control: valid client is accepted", client: func(h *hub, t *testing.T) issued { return h.deviceCA.client(t, "ok") }},
