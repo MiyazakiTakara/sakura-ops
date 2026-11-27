@@ -35,3 +35,5 @@ Hub tworzy trwały run/step/command z unikalnym ID i lease. Agent przed ack acce
 ## Testy
 
 Fixtures dobrych/złych canonical bytes, zła CA/serial/ID, expiry/clock skew, replay, ten sam ID inny hash, reconnect i result ack lost, journal crash w każdym przejściu, dwa streamy, fencing, oversized frame, backpressure, nieznany typ, niespójny adapter, cancel/timeout, odwołanie cert i rotacja kluczy. Test protokołu na dwóch niezależnych procesach, potem VM; brak produkcyjnych hostów. Go race/fuzz parsera i protokołu. Protobuf field numbers i wire spec zatwierdzić i wygenerować w etapie 006, nie traktować tabeli jako gotowego .proto.
+
+Wire format: `proto/sakuraops/agent/v1/agent.proto` (normative from NEXT-006, see docs/dev/contracts.md).

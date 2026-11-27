@@ -5,15 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-)
 
-// apiError is the error envelope from docs/23-api-contract.md. field_errors is
-// omitted until an endpoint actually produces field-level errors.
-type apiError struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	RequestID string `json:"request_id"`
-}
+	"github.com/MiyazakiTakara/sakura-ops/internal/api/apitypes"
+)
 
 func newRequestID() string {
 	var b [16]byte
@@ -32,9 +26,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, apiError{
+	writeJSON(w, status, apitypes.Error{
 		Code:      code,
 		Message:   message,
-		RequestID: w.Header().Get("X-Request-ID"),
+		RequestId: w.Header().Get("X-Request-ID"),
 	})
 }

@@ -78,3 +78,5 @@ secrets:
 
 ## check: everything CI runs, in one go. Includes `vuln`, which needs network.
 check: fmt-check vet staticcheck test proto-check web-install web-check build vuln secrets
+
+-include mk/*.mk

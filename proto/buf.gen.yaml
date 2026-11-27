@@ -1,0 +1,8 @@
+version: v2
+plugins:
+  - local: ["go", "tool", "-modfile=../tools/go.mod", "protoc-gen-go"]
+    out: ..
+    opt: module=github.com/MiyazakiTakara/sakura-ops
+  - local: ["go", "tool", "-modfile=../tools/go.mod", "protoc-gen-go-grpc"]
+    out: ..
+    opt: module=github.com/MiyazakiTakara/sakura-ops
