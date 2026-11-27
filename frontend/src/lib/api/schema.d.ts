@@ -26,6 +26,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness probe
+         * @description Returns 200 when the database answers and its schema version equals the version
+         *     this binary requires. HEAD is accepted too (same status, no body). Otherwise 503
+         *     with the error envelope; `code` is one of:
+         *     `db_not_configured` (hub started without a database),
+         *     `db_unavailable` (database unreachable or the check timed out),
+         *     `schema_outdated` (database migrated to an older version than required),
+         *     `schema_ahead` (database migrated by a newer release than this binary).
+         *     Responses carry no driver detail. Any other method returns 405.
+         */
+        get: operations["getReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api": {
         parameters: {
             query?: never;
@@ -78,6 +105,15 @@ export interface components {
         Health: {
             /** @enum {string} */
             status: "ok";
+        };
+        Readiness: {
+            /** @enum {string} */
+            status: "ready";
+            /**
+             * Format: int64
+             * @description Applied database schema version.
+             */
+            schema_version: number;
         };
         /**
          * @description Error envelope (docs/23-api-contract.md). Carries no traceback and no
@@ -152,6 +188,37 @@ export interface operations {
                 };
             };
             405: components["responses"]["MethodNotAllowed"];
+        };
+    };
+    getReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hub can serve traffic. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readiness"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            /** @description Not ready; see the `code` values above. */
+            503: {
+                headers: {
+                    "X-Request-ID": components["headers"]["XRequestID"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     reservedApiRoot: {

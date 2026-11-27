@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MiyazakiTakara/sakura-ops/internal/api/apitypes"
 	"github.com/MiyazakiTakara/sakura-ops/internal/store"
 )
 
@@ -46,10 +47,7 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusServiceUnavailable, "db_unavailable", "Database is unavailable.")
 	default:
-		writeJSON(w, http.StatusOK, struct {
-			Status        string `json:"status"`
-			SchemaVersion int64  `json:"schema_version"`
-		}{"ready", v})
+		writeJSON(w, http.StatusOK, apitypes.Readiness{Status: apitypes.ReadinessStatusReady, SchemaVersion: v})
 	}
 }
 

@@ -18,6 +18,21 @@ func (e HealthStatus) Valid() bool {
 	}
 }
 
+// Defines values for ReadinessStatus.
+const (
+	ReadinessStatusReady ReadinessStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the ReadinessStatus enum.
+func (e ReadinessStatus) Valid() bool {
+	switch e {
+	case ReadinessStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Error Error envelope (docs/23-api-contract.md). Carries no traceback and no
 // cross-scope data. `field_errors` is omitted when no field-level error exists.
 type Error struct {
@@ -48,6 +63,16 @@ type Health struct {
 
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
+
+// Readiness defines model for Readiness.
+type Readiness struct {
+	// SchemaVersion Applied database schema version.
+	SchemaVersion int64           `json:"schema_version"`
+	Status        ReadinessStatus `json:"status"`
+}
+
+// ReadinessStatus defines model for Readiness.Status.
+type ReadinessStatus string
 
 // MethodNotAllowed Error envelope (docs/23-api-contract.md). Carries no traceback and no
 // cross-scope data. `field_errors` is omitted when no field-level error exists.
