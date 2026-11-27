@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import { runLocalCommand, SPIKE_COMMANDS } from './commands';
 	import { LineEditor, PROMPT, type Effect } from './lineEditor';
+	import { INITIAL_REDRAW, redrawSequence, toLineEnd, type RedrawState } from './redraw';
 
 	let host: HTMLDivElement;
 
@@ -28,12 +29,33 @@
 
 		const editor = new LineEditor(SPIKE_COMMANDS);
 
+		let drawn: RedrawState = INITIAL_REDRAW;
+
 		const redraw = (): void => {
-			const back = Array.from(editor.line).length - editor.cursor;
-			term.write(`\r\x1b[2K${PROMPT_ANSI}${editor.line}${back > 0 ? `\x1b[${back}D` : ''}`);
+			const [seq, next] = redrawSequence(
+				{
+					promptAnsi: PROMPT_ANSI,
+					promptWidth: Array.from(PROMPT).length,
+					line: editor.line,
+					cursor: editor.cursor,
+					cols: term.cols
+				},
+				drawn
+			);
+			drawn = next;
+			term.write(seq);
+		};
+
+		// Output goes below the (possibly wrapped) prompt line; afterwards the cursor is at column 0
+		// of a fresh row and the next redraw starts there.
+		const below = (): void => {
+			const [seq] = toLineEnd(drawn);
+			term.write(seq);
+			drawn = INITIAL_REDRAW;
 		};
 
 		const printLines = (lines: string[]): void => {
+			below();
 			for (const l of lines) term.write(`\r\n${l}`);
 			term.write('\r\n');
 		};
@@ -52,13 +74,16 @@
 						break;
 					case 'clear':
 						term.write(CLEAR_SCREEN);
+						drawn = INITIAL_REDRAW;
 						redraw();
 						break;
 					case 'submit': {
 						const result = runLocalCommand(e.line);
 						if (result.kind === 'clear') {
 							term.write(CLEAR_SCREEN);
+							drawn = INITIAL_REDRAW;
 						} else {
+							below();
 							term.write('\r\n');
 							for (const l of result.lines) term.write(`${l}\r\n`);
 						}
@@ -84,7 +109,12 @@
 	});
 </script>
 
-<div class="term" bind:this={host} role="group" aria-label="skr terminal (local spike)"></div>
+<div
+	class="term"
+	bind:this={host}
+	role="group"
+	aria-label="skr terminal (local spike). Press Escape to leave the terminal."
+></div>
 
 <style>
 	.term {
