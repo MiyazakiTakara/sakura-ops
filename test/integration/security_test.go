@@ -186,3 +186,86 @@ func TestBootstrapPasswordFiles(t *testing.T) {
 		t.Fatal("bootstrap without passwords must fail")
 	}
 }
+
+// TestBootstrapHardensExistingRoles runs on its own cluster because roles are
+// cluster-wide and the second case deliberately leaves a forbidden membership.
+func TestBootstrapHardensExistingRoles(t *testing.T) {
+	c, err := startCluster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.remove)
+	ctx := context.Background()
+	admin := c.superConn(t, "postgres")
+
+	attrs := func(role string) (super, createdb, createrole, repl, bypass, login bool) {
+		t.Helper()
+		if err := admin.QueryRow(ctx,
+			`SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = $1`, role,
+		).Scan(&super, &createdb, &createrole, &repl, &bypass, &login); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	newEmptyDB := func() string {
+		db := "it_" + randHex(6)
+		if _, err := admin.Exec(ctx, "CREATE DATABASE "+db); err != nil {
+			t.Fatal(err)
+		}
+		return db
+	}
+
+	t.Run("pre-existing privileged roles are demoted", func(t *testing.T) {
+		for _, r := range []string{roleApp, roleMigrator} {
+			if _, err := admin.Exec(ctx, "CREATE ROLE "+r+" LOGIN CREATEDB CREATEROLE REPLICATION BYPASSRLS"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		c.bootstrap(t, newEmptyDB())
+		for _, r := range []string{roleApp, roleMigrator} {
+			super, createdb, createrole, repl, bypass, login := attrs(r)
+			if super || createdb || createrole || repl || bypass || !login {
+				t.Errorf("%s after bootstrap: super=%v createdb=%v createrole=%v repl=%v bypassrls=%v login=%v",
+					r, super, createdb, createrole, repl, bypass, login)
+			}
+		}
+	})
+
+	t.Run("membership in another role is refused", func(t *testing.T) {
+		for name, grant := range map[string]string{
+			"app in migrator":         "GRANT " + roleMigrator + " TO " + roleApp,
+			"app in predefined role":  "GRANT pg_read_all_data TO " + roleApp,
+			"migrator in app":         "GRANT " + roleApp + " TO " + roleMigrator,
+			"app in privileged group": "",
+		} {
+			if grant == "" {
+				if _, err := admin.Exec(ctx, "CREATE ROLE it_priv_group NOLOGIN CREATEROLE"); err != nil {
+					t.Fatal(err)
+				}
+				grant = "GRANT it_priv_group TO " + roleApp
+			}
+			if _, err := admin.Exec(ctx, grant); err != nil {
+				t.Fatalf("%s: %v", name, describe(err))
+			}
+			out, err := c.bootstrapRaw(newEmptyDB(), fmt.Sprintf("\\set migrator_password '%s'\n\\set app_password '%s'\n", c.migPW, c.appPW), nil)
+			if err == nil || !strings.Contains(string(out)+err.Error(), "unexpected role membership") {
+				t.Errorf("%s: bootstrap must fail with a membership error, got err=%v", name, err)
+			}
+			for _, leak := range []string{c.migPW, c.appPW} {
+				if strings.Contains(string(out)+err.Error(), leak) {
+					t.Errorf("%s: bootstrap output leaks a password", name)
+				}
+			}
+			for _, rv := range []string{
+				"REVOKE " + roleMigrator + " FROM " + roleApp,
+				"REVOKE pg_read_all_data FROM " + roleApp,
+				"REVOKE " + roleApp + " FROM " + roleMigrator,
+				"REVOKE it_priv_group FROM " + roleApp,
+			} {
+				_, _ = admin.Exec(ctx, rv)
+			}
+		}
+		// With the memberships gone the bootstrap succeeds again.
+		c.bootstrap(t, newEmptyDB())
+	})
+}

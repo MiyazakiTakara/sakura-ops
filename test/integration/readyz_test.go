@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -101,6 +102,86 @@ func TestReadyzSchemaStates(t *testing.T) {
 		if strings.Contains(raw, leak) || strings.Contains(logs.String(), c.appPW) {
 			t.Fatalf("leak of %q in response or log", leak)
 		}
+	}
+}
+
+// TestReadyzSchemaAhead: a database migrated by a newer release than the binary
+// (here a test-only version 2 on top of the real baseline) is not ready, both
+// for an in-process handler and for the real hub binary built from the real set.
+func TestReadyzSchemaAhead(t *testing.T) {
+	c := sharedPG
+	db := c.newDB(t)
+	latest := migrations.LatestVersion()
+	fixture := withFixture(t, fmt.Sprintf("%05d_fixture_ahead.sql", latest+1),
+		`ALTER TABLE sakuraops.instance_settings ADD COLUMN fixture_ahead text NOT NULL DEFAULT 'n/a';`)
+	if applied, err := newRunner(t, c, db, fixture).Up(context.Background()); err != nil || len(applied) != 2 {
+		t.Fatalf("apply fixture: %v, %v", applied, err)
+	}
+
+	var logs bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	srv := httptest.NewServer(hubHandler(t, openApp(t, c, db), latest, log))
+	defer srv.Close()
+	code, body, raw := getReady(t, srv.URL)
+	if code != 503 || body.Code != "schema_ahead" || body.Message != "Database schema is newer than this binary supports." {
+		t.Fatalf("in-process: %d %s", code, raw)
+	}
+	if !strings.Contains(logs.String(), "schema ahead") {
+		t.Fatalf("missing log line: %s", logs.String())
+	}
+
+	h := startHub(t, "-database-url-file", writeDSNFile(t, c.appDSN(db)))
+	code, body, raw = getReady(t, h.base)
+	if code != 503 || body.Code != "schema_ahead" {
+		t.Fatalf("hub binary: %d %s", code, raw)
+	}
+	if strings.Contains(h.out.String(), c.appPW) {
+		t.Fatal("hub log contains the database password")
+	}
+}
+
+// TestNoConnectionDetailsOnFailures: neither the migrator nor the hub prints the
+// URL, password, host, port or user on a wrong password or a refused connection.
+func TestNoConnectionDetailsOnFailures(t *testing.T) {
+	c := sharedPG
+	db := migratedDB(t, c)
+	wrongPW := "wrong-" + randHex(8)
+	refusedPort := freePort(t)
+	cases := map[string]string{
+		"wrong password":     fmt.Sprintf("postgres://%s:%s@127.0.0.1:%s/%s?sslmode=disable", roleApp, wrongPW, c.port, db),
+		"connection refused": fmt.Sprintf("postgres://%s:%s@127.0.0.1:%s/%s?sslmode=disable", roleApp, wrongPW, refusedPort, db),
+	}
+	for name, dsn := range cases {
+		leaks := []string{wrongPW, "127.0.0.1", c.port, refusedPort, roleApp, c.appPW, db, "postgres://"}
+		check := func(what, out string) {
+			t.Helper()
+			for _, l := range leaks {
+				if strings.Contains(out, l) {
+					t.Errorf("%s, %s: output contains %q: %s", name, what, l, out)
+				}
+			}
+		}
+		file := writeDSNFile(t, dsn)
+		for _, verb := range []string{"up", "status", "version"} {
+			rc, out := runMigrate(t, file, verb)
+			if rc != 1 {
+				t.Errorf("%s, migrate %s: exit %d, want 1: %s", name, verb, rc, out)
+			}
+			check("migrate "+verb, out)
+		}
+		h := startHub(t, "-database-url-file", file)
+		code, _, raw := getReady(t, h.base)
+		if code != 503 {
+			t.Errorf("%s: hub readyz %d", name, code)
+		}
+		check("hub readyz response", raw)
+		var hubLog []string // the hub's own listen address is expected in its "listening" line
+		for _, line := range strings.Split(h.out.String(), "\n") {
+			if !strings.Contains(line, "msg=listening") {
+				hubLog = append(hubLog, line)
+			}
+		}
+		check("hub log", strings.Join(hubLog, "\n"))
 	}
 }
 

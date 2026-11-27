@@ -38,7 +38,17 @@ Nothing here connects to a real instance: tests start a throwaway container.
   with `SAKURAOPS_MIGRATOR_PASSWORD_FILE` and `SAKURAOPS_APP_PASSWORD_FILE` in the environment
   (files, preferred), or `-v migrator_password=... -v app_password=...` (visible in the process
   list; lab use only). Empty or missing passwords abort the script. Re-running resets the
-  passwords and is otherwise a no-op.
+  passwords and re-applies `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN`
+  to both roles, so roles that existed beforehand are hardened too; it is otherwise a no-op.
+  If either role is a member (direct or inherited) of a privileged or `pg_*` role, or the two
+  roles are members of each other, the script fails with an error and revokes nothing.
+
+## Transport security (TLS)
+
+Dev and CI connect to a local throwaway container without TLS (`sslmode=disable` on loopback).
+That is acceptable only there. Any non-local deployment must use `sslmode=verify-full` with a
+CA that signs the server certificate. The code does not enforce this yet; it is a production
+gate tracked in #36.
 
 ## Migrator
 
@@ -73,7 +83,11 @@ sakuraops-migrate [-database-url-file PATH] [-timeout 2m] up|status|version
   Only one real migration exists, so the second step is a test-only fixture migration in the
   same goose table; the mechanics are identical to a real `00002`. Add a real stepwise case
   with the first real follow-up migration.
-- The hub requires `schema_version >= migrations.LatestVersion()` (compiled in) for `/readyz`.
+- The hub requires `schema_version == migrations.LatestVersion()` (compiled in) for `/readyz`.
+  A database that is ahead of the binary is not ready either (`schema_ahead`).
+- There is **no binary downgrade**. A database migrated by a newer release is refused by an
+  older binary; going back means restoring the backup taken before the upgrade, then running
+  the older image.
 
 ## Hub readiness
 
@@ -82,8 +96,9 @@ lazily, so the hub starts while the database is down.
 
 | `GET /readyz` | Meaning |
 | --- | --- |
-| 200 `{"status":"ready","schema_version":N}` | database reachable, schema version >= the compiled-in version |
+| 200 `{"status":"ready","schema_version":N}` | database reachable, schema version equal to the compiled-in version |
 | 503 `schema_outdated` | reachable, but not migrated or older than this binary |
+| 503 `schema_ahead` | migrated by a newer release; "Database schema is newer than this binary supports." (fail closed, logged with have/need) |
 | 503 `db_unavailable` | connection or query failed (details only in the redacted log) |
 | 503 `db_not_configured` | started without `-database-url-file` |
 
@@ -105,14 +120,15 @@ container afterwards. Cases: fresh migrate, re-run no-op, stepwise upgrade with 
 concurrent migrator processes, in-process concurrent runners on a slow migration, application
 role denials (DDL, goose table, singleton rows), role attributes, bootstrap idempotency and
 password-file variant, singleton and check constraints, `/readyz` (unmigrated, current, newer
-binary, container stopped), and the hub binary through its flag.
+binary, database ahead of the binary, container stopped), no connection details in output on wrong
+password and refused connection, bootstrap hardening of pre-existing roles, and the hub binary through its flag.
 
 ## Not included
 
 - Wiring the hub and migrator into `deployment/compose/compose.dev.yaml` (follow-up after both
   PRs merge). Docker Compose file secrets are bind mounts that keep the host owner, so that
   follow-up must decide how the non-root hub reads its URL file.
-- Backups and restore tooling, TLS to PostgreSQL (the test connections use `sslmode=disable`
+- Backups and restore tooling, TLS to PostgreSQL (see Transport security above; the test connections use `sslmode=disable`
   on loopback), connection poolers, row-level security.
 - Any table other than `instance_settings`; the rest of docs/22-data-model.md arrives with
   NEXT-013, 014, 015, 018.

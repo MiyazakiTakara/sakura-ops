@@ -45,8 +45,9 @@ func TestReadyzStates(t *testing.T) {
 		wantCode int
 		wantErr  string
 	}{
-		{"ready", fakeVersioner{v: 3}, 200, ""},
+		{"ready", fakeVersioner{v: 2}, 200, ""},
 		{"equal to required", fakeVersioner{v: 2}, 200, ""},
+		{"ahead of binary", fakeVersioner{v: 3}, 503, "schema_ahead"},
 		{"outdated", fakeVersioner{v: 1}, 503, "schema_outdated"},
 		{"not migrated", fakeVersioner{v: 0}, 503, "schema_outdated"},
 		{"unavailable", fakeVersioner{err: errors.New(secretish)}, 503, "db_unavailable"},

@@ -115,7 +115,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		// Never print the raw error: driver messages can name hosts and users.
 		attrs := []any{"command", cmd, "cause", store.Describe(err)}
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
+		if errors.As(err, &pgErr) && !connectionClass(pgErr.Code) {
 			// Server-side message only (no detail, no row data, no connection info).
 			attrs = append(attrs, "server_message", pgErr.Message)
 		}
@@ -123,6 +123,20 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		return exitFail
 	}
 	return exitOK
+}
+
+// connectionClass reports SQLSTATE classes whose server message echoes connection
+// details (28 invalid authorization: "password authentication failed for user ...",
+// 3D invalid catalog: database name, 08 connection exception, 57 operator intervention).
+func connectionClass(code string) bool {
+	if len(code) < 2 {
+		return true
+	}
+	switch code[:2] {
+	case "08", "28", "3D", "57":
+		return true
+	}
+	return false
 }
 
 func execute(ctx context.Context, r *migrate.Runner, cmd string, out io.Writer) error {

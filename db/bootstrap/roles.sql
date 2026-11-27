@@ -35,6 +35,37 @@ SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLIC
 FROM (VALUES ('sakuraops_migrator'), ('sakuraops_app')) AS t(r)
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) \gexec
 
+-- Refuse to continue if either role is a member (direct or inherited) of a
+-- privileged or predefined role, or if the two roles are members of each other.
+-- Memberships are never revoked silently: the operator must look at them.
+DO $$
+DECLARE bad text;
+BEGIN
+  WITH RECURSIVE m(member, roleid) AS (
+    SELECT am.member, am.roleid FROM pg_auth_members am
+    WHERE am.member IN (SELECT oid FROM pg_roles WHERE rolname IN ('sakuraops_migrator', 'sakuraops_app'))
+    UNION
+    SELECT m.member, am.roleid FROM m JOIN pg_auth_members am ON am.member = m.roleid
+  )
+  SELECT string_agg(DISTINCT format('%s is a member of %s', mr.rolname, gr.rolname), '; ') INTO bad
+  FROM m
+  JOIN pg_roles mr ON mr.oid = m.member
+  JOIN pg_roles gr ON gr.oid = m.roleid
+  WHERE gr.rolsuper OR gr.rolcreaterole OR gr.rolcreatedb OR gr.rolreplication OR gr.rolbypassrls
+     OR gr.rolname LIKE 'pg\_%'
+     OR gr.rolname IN ('sakuraops_migrator', 'sakuraops_app');
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'bootstrap: refusing to run, unexpected role membership (%): revoke it manually', bad;
+  END IF;
+END $$;
+
+-- Harden roles that already existed: reset every privilege attribute on each run.
+-- A superuser that is the bootstrap's own session user is left alone.
+SELECT format('ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN', rolname)
+FROM pg_roles
+WHERE rolname IN ('sakuraops_migrator', 'sakuraops_app')
+  AND NOT (rolsuper AND rolname = session_user) \gexec
+
 -- (Re)set passwords; psql quotes the variables as literals.
 ALTER ROLE sakuraops_migrator WITH LOGIN PASSWORD :'migrator_password';
 ALTER ROLE sakuraops_app WITH LOGIN PASSWORD :'app_password';

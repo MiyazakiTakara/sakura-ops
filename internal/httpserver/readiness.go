@@ -14,8 +14,12 @@ import (
 // migrated to an older schema than this binary requires.
 var ErrSchemaOutdated = errors.New("database schema is older than this binary requires")
 
+// ErrSchemaAhead is returned when the database was migrated by a newer release
+// than this binary: an old binary must not run on a schema it does not know.
+var ErrSchemaAhead = errors.New("database schema is newer than this binary supports")
+
 // Readiness reports whether the hub's dependencies can serve traffic. Any error
-// other than ErrSchemaOutdated means the dependency is unavailable.
+// other than ErrSchemaOutdated or ErrSchemaAhead means the dependency is unavailable.
 type Readiness interface {
 	Ready(ctx context.Context) (schemaVersion int64, err error)
 }
@@ -37,6 +41,8 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrSchemaOutdated):
 		writeError(w, http.StatusServiceUnavailable, "schema_outdated", "Database schema is not up to date.")
+	case errors.Is(err, ErrSchemaAhead):
+		writeError(w, http.StatusServiceUnavailable, "schema_ahead", "Database schema is newer than this binary supports.")
 	case err != nil:
 		writeError(w, http.StatusServiceUnavailable, "db_unavailable", "Database is unavailable.")
 	default:
@@ -53,7 +59,7 @@ type SchemaVersioner interface {
 }
 
 // DBReadiness checks that the database answers and that its schema version is at
-// least Required. Failures are logged as a redacted classification only; the
+// exactly Required. Failures are logged as a redacted classification only; the
 // HTTP response carries no driver detail either.
 type DBReadiness struct {
 	Store    SchemaVersioner
@@ -75,6 +81,12 @@ func (d DBReadiness) Ready(ctx context.Context) (int64, error) {
 			d.Log.Error("readiness: schema outdated", "have", v, "need", d.Required)
 		}
 		return v, ErrSchemaOutdated
+	}
+	if v > d.Required {
+		if d.Log != nil {
+			d.Log.Error("readiness: schema ahead of binary", "have", v, "need", d.Required)
+		}
+		return v, ErrSchemaAhead
 	}
 	return v, nil
 }

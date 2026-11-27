@@ -75,3 +75,17 @@ func TestConfigErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectionClassHidesServerMessage(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"28P01", "28000", "3D000", "08006", "57P01", "", "2"} {
+		if !connectionClass(code) {
+			t.Errorf("%q must hide the server message", code)
+		}
+	}
+	for _, code := range []string{"42501", "23505", "42P07", "XX000"} {
+		if connectionClass(code) {
+			t.Errorf("%q must keep the server message", code)
+		}
+	}
+}
