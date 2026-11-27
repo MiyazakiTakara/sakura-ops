@@ -25,9 +25,9 @@ func (v Verdict) String() string {
 	}
 }
 
-// classify evaluates one identifier. A trailing "+" ("or later") is stripped
-// for the deny check only, so GPL-2.0+ is denied by the GPL- prefix and an
-// allowlisted base is not silently widened.
+// classify evaluates one identifier. A trailing "+" ("or later") is not stripped:
+// GPL-2.0+ is still denied by the GPL- prefix, and an "X+" form of an
+// allowlisted X is Unlisted, so the allowlist is never silently widened.
 func (p *Policy) classify(id string) Verdict {
 	l := strings.ToLower(strings.TrimSpace(id))
 	if l == "" {

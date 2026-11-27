@@ -101,11 +101,10 @@ get a reviewed exception.
 - osv-scanner was not added: Go is covered with better precision by govulncheck, and npm advisories
   come from the GitHub advisory database that `npm audit` uses. A second scanner would add a
   binary to pin without new coverage. Revisit if a language without its own scanner is added.
-- `actions/dependency-review-action` (pinned SHA) runs on pull requests with
-  `fail-on-severity: high` and the licence deny list mirrored as SPDX ids. It diffs the PR's
-  dependency changes against the repository dependency graph, so it requires the **dependency
-  graph to be enabled** in the repository settings; it fails with an explanatory message
-  otherwise. It only mirrors the deny list; the allowlist is enforced by the checker above.
+- `actions/dependency-review-action` is **not enabled**: it needs the repository dependency
+  graph, which is disabled in this repository (the API answers `Forbidden`). Enabling it is a
+  repository setting for the owner; tracked in #24. Until then, the licence policy over the SBOM,
+  `npm audit` and govulncheck above are the enforced checks.
 
 ## Out of scope here
 
