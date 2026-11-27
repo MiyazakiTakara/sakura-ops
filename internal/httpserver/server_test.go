@@ -83,7 +83,7 @@ func TestHealthzRejectsOtherMethods(t *testing.T) {
 
 func TestAPINeverFallsBack(t *testing.T) {
 	h := testHandler(t)
-	for _, target := range []string{"/api", "/api/", "/api/unknown", "/api/v1/hosts", "/api/v1/x.js", "/API/v1/hosts", "/healthz/x", "/healthz/"} {
+	for _, target := range []string{"/api", "/api/", "/api/unknown", "/api/v1/hosts", "/api/v1/x.js", "/API/v1/hosts", "/healthz/x", "/healthz/", "/readyz/", "/readyz/x", "/READYZ/x"} {
 		for _, m := range []string{"GET", "POST"} {
 			rec := do(h, m, target)
 			if rec.Code != http.StatusNotFound {

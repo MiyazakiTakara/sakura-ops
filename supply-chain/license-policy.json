@@ -28,6 +28,30 @@
       "license": "Apache-2.0 AND sha256:257bb2d062ee0b9226e3b5f9c3c5d6aa3d38a450df27a9e060f061d4d4a4eb6f",
       "reason": "Detection artefact. LICENSE is Apache-2.0. The hashed entry is NOTICE, which states that the files ported from libyaml stay under MIT; the effective licence is Apache-2.0 AND MIT, both allowlisted. Indirect dependency of kin-openapi (contract test only). The hash pins that NOTICE, so a changed file needs a new review.",
       "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
+    },
+    {
+      "purl": "pkg:golang/github.com/jackc/pgx/v5@v5.13.0",
+      "license": "MIT AND sha256:4b9071daf5f9975eb936c370200709bb7433862c5d4a32d21db65620133f4a8e",
+      "reason": "Detection artefact. LICENSE is MIT. The hashed entry is the Go source file pgproto3/notice_response.go (the PostgreSQL NoticeResponse message type), which syft misreads as a licence text. Linked into the server binary (database store). The hash pins that file; a changed file needs a new review.",
+      "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
+    },
+    {
+      "purl": "pkg:golang/modernc.org/libc@v1.80.2",
+      "license": "BSD-3-Clause AND sha256:f597097efe3d97021f89170746bd3a0fb9a8b6fb26b82043ed68a4e0283bee6c",
+      "reason": "LICENSE is BSD-3-Clause. The hashed entry is LICENSE-3RD-PARTY.md: third-party notices for Go (BSD-3-Clause), musl libc (MIT, with BSD-2-Clause and public-domain portions), go-netdb and nixpkgs (MIT). Module-graph only: reached via github.com/pressly/goose/v3's own test packages; `go list -deps -test ./...` lists no modernc.org package, so nothing from it is compiled into or tested with SakuraOps. The hashes pin the reviewed files; a change or version bump needs a new review.",
+      "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
+    },
+    {
+      "purl": "pkg:golang/modernc.org/memory@v1.12.1",
+      "license": "BSD-3-Clause AND sha256:5ae5bee3072a841376451b48d8cfcec7188e10543926d5870828d36c8a750dc5",
+      "reason": "LICENSE is BSD-3-Clause. The hashed entry is LICENSE-LOGO, a single URL crediting the project logo image on Wikimedia Commons; the image is not part of the Go code. Module-graph only: reached via github.com/pressly/goose/v3's own test packages; `go list -deps -test ./...` lists no modernc.org package, so nothing from it is compiled into or tested with SakuraOps. The hashes pin the reviewed files; a change or version bump needs a new review.",
+      "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
+    },
+    {
+      "purl": "pkg:golang/modernc.org/sqlite@v1.62.0",
+      "license": "BSD-3-Clause AND MIT AND sha256:8438c9c89b849131ead81d5435cb97fcf052df5b0b286dda8a2d4c29e6cb3fd0 AND sha256:f4a00ade8f4057ab0ea49097d9c459df8559fcf10ca78da0c950343fb7428d37",
+      "reason": "LICENSE is BSD-3-Clause, plus MIT. The hashed entries are LICENSE-SQLITE (SQLite public-domain dedication) and LICENSE-3RD-PARTY.md (third-party notices: MIT, BSD-3-Clause, Apache-2.0, public domain). Module-graph only: reached via github.com/pressly/goose/v3's own test packages; `go list -deps -test ./...` lists no modernc.org package, so nothing from it is compiled into or tested with SakuraOps. The hashes pin the reviewed files; a change or version bump needs a new review.",
+      "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
     }
   ]
 }

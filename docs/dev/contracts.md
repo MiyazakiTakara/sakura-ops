@@ -10,7 +10,7 @@ Two contract families, both generated code is committed and checked for drift.
 | Agent protocol v1 draft | `proto/sakuraops/agent/v1/agent.proto` | `internal/agentproto/agentv1/*.pb.go` |
 
 The OpenAPI document lists ONLY behaviour the server implements and tests today (`GET /healthz`,
-the reserved `/api` namespace, the error envelope). `docs/23-api-contract.md` stays the planning
+`GET /readyz`, the reserved `/api` namespace, the error envelope). `docs/23-api-contract.md` stays the planning
 scope; an endpoint enters the OpenAPI file in the same change that implements it, never earlier.
 
 The `.proto` file is normative for the wire format from now on; `docs/13-agent-protocol.md`
