@@ -1,11 +1,10 @@
 name: CI
 
-# Pull requests only (plus manual dispatch). No push trigger, no secrets, no deploy.
+# Pull requests only: no push, schedule or manual trigger, no secrets, no deploy.
 on:
   pull_request:
     branches:
       - v2/native-agent-blueprint
-  workflow_dispatch:
 
 permissions:
   contents: read
