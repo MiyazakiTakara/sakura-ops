@@ -3,7 +3,7 @@
 Raw measurements from one machine on 2026-11-27. They are not benchmarks of the product,
 not a comparison with any other stack, and no thresholds were derived from them
 (docs/17-testing.md). Code measured: commit `b5d38fdeae8431c6e4c1191da4d896333344549b`
-(test results below were rerun at `a9e702c`, which adds a goroutine-leak fix and an SPA routing fix; later commits only add documentation).
+(test results below were rerun at `cd6b349`, which adds a goroutine-leak fix, an SPA routing fix and transport close on revocation; later commits only change documentation).
 
 ## Environment
 
@@ -67,12 +67,12 @@ So about 0.75 ms per full handshake and about 0.11 ms per small unary call on th
 Cross-host latency, handshake through a reverse proxy, and many concurrent agents: NOT RUN
 (no lab network or proxy in this session).
 
-## Test results (commit a9e702c)
+## Test results (commit cd6b349)
 
 | Command | Result |
 | --- | --- |
-| `go test -race -count=1 -v ./...` | 50 PASS lines, 0 FAIL, 0 SKIP: 24 top-level tests and 26 subtests (httpserver 13+16, spike/mtls 11+10) |
-| `make fuzz-short` | `FuzzCleanAssetPath` 574 411 execs and `FuzzSPAHandlerNeverLeaks` 581 076 execs in 10 s each, no failures |
+| `go test -race -count=1 -v ./...` | 52 PASS lines, 0 FAIL, 0 SKIP: 26 top-level tests and 26 subtests (httpserver 13+16, spike/mtls 13+10). `go test -race -count=20 ./internal/spike/mtls/` also passed (95 s) |
+| `make fuzz-short` | `FuzzCleanAssetPath` 295 456 execs and `FuzzSPAHandlerNeverLeaks` 427 765 execs in 10 s each (rerun alone at `cd6b349`), no failures |
 | `make web-check` | svelte-check: 0 errors, 0 warnings (224 files); `prettier --check` clean; vitest: 1 file, 18 tests passed |
 | `make staticcheck`, `make vet`, `make fmt-check` | clean |
 | `make proto-check` | clean; verified to fail when the schema changes without regeneration |
@@ -89,8 +89,10 @@ Required mTLS cases, each a real passing test: two valid clients with distinct v
 identities; foreign-CA client cert; no client cert; client cert with serverAuth-only EKU;
 client cert with no EKU; expired and not-yet-valid client certs; server cert for the wrong DNS
 name; client not trusting the server CA; client capped at TLS 1.2; revoked serial rejected at
-handshake; revocation while a stream is open closes only that client's stream (and the revoked
-client's new calls on the old connection and new connections fail); deadline exceeded;
+handshake; revocation while a stream is open closes only that client's stream and transport
+connection (new calls and new connections of the revoked client fail); revocation of a client
+whose server handler is blocked in `Send` under flow control (it never reads) releases the
+handler and closes the connection while another client stays healthy; deadline exceeded;
 message of 256 KiB + 1 byte rejected with ResourceExhausted; TLS 1.3 and ALPN h2 observed
 server-side; reconnect after server restart within 4 s with a 50-400 ms backoff; client in a
 separate OS process.
@@ -167,6 +169,56 @@ Build and test only:
 License values come from each package's `package.json` `license` field. Transitive licenses
 were not scanned: NOT RUN (the license scan is a pre-distribution item for P02).
 
+## Technology gate status (docs/10-stack.md)
+
+Status values are real: PASS means run and passing in this branch, PARTIAL means some sub-checks
+done, NOT RUN means nothing done. "Owner" is where the remainder belongs.
+
+| Gate item | What P01 verified | Status | Owner (NEXT, issue) |
+| --- | --- | --- | --- |
+| 1a. Go HTTP health, static Svelte build served by Go without Node at runtime | `/healthz`, embedded SPA, fallback rules, security headers, CSP without script `unsafe-inline`; handler tests, fuzz; smoke test in CI workflow | PASS | |
+| 1b. "Authorisation for tests" in the minimal server | no authentication exists in P01 | NOT RUN | auth work package; owning NEXT ID and issue to be assigned by the coordinator |
+| 1c. Floating skr window with Tab, history, resize, CodeMirror, Svelte reactivity in a browser | line editing, history, Tab and escape filtering unit tested (18 Vitest tests); headless Chrome renders the route (xterm and CodeMirror present); interactive behaviour in a real browser not exercised | PARTIAL | NEXT-006 / NEXT-011 (#24 / #26) |
+| 2a. Proto generation with pinned generator and drift check | `buf` + protoc-gen-go(-grpc) pinned, `make proto-check` fails on drift | PASS (spike schema only) | |
+| 2b. OpenAPI generation and request/response parity | not started | NOT RUN | NEXT-004 / NEXT-006 (#24) |
+| 2c. sqlc queries, Goose migrations on fresh PostgreSQL and upgrade test | sqlc and goose pinned and version-checked only; no schema, no PostgreSQL | NOT RUN | NEXT-004 / NEXT-006 (#24) |
+| 3a. Two Go processes over gRPC/mTLS | server and client in separate OS processes (helper-process test) | PASS | |
+| 3b. Two different client certificates | distinct verified identities server-side | PASS | |
+| 3c. Failure with a foreign CA | foreign-CA client, no cert, wrong EKU, no EKU, expired, not yet valid, wrong server name, untrusted server CA, TLS 1.2 | PASS | |
+| 3d. Revoke closes the stream | revoked at handshake; open stream ended; transport closed; works under backpressure; in-memory only | PARTIAL (in-memory, single process) | NEXT-017 (#28) |
+| 3e. Reconnect | one server restart, bounded backoff 50-400 ms; reconnect storms and production backoff (2-60 s) not tested | PARTIAL | NEXT-017 (#28), load: NEXT-050 |
+| 3f. Deadline | DeadlineExceeded returned | PASS | |
+| 3g. Max message | 256 KiB + 1 byte rejected with ResourceExhausted | PASS | |
+| 3h. HTTP/2 and ALPN, direct connection | h2 and TLS 1.3 observed server-side | PASS | |
+| 3i. HTTP/2 and ALPN in the target reverse-proxy topology | no proxy used | NOT RUN | NEXT-017 (#28), NEXT-047 (#36) |
+| 4a. Go build for the test architecture; RSS, CPU, size, latency on described hardware | linux/amd64 on one WSL2 laptop, single runs, see sections above | PARTIAL | NEXT-050 |
+| 4b. arm64 build and measurements; target hardware | not built, not measured | NOT RUN | NEXT-050 / NEXT-071 |
+| 5a. CI on pull requests only: go test, race, govulncheck, lint, proto drift, svelte-check, Vitest, build | defined in `.github/workflows/ci.yml` and all commands pass locally; the workflow itself has not been observed running on GitHub at the time of writing | PARTIAL | verify on the PR run |
+| 5b. Fuzzing in CI, sqlc/OpenAPI drift, Playwright, PostgreSQL integration, SBOM, artefact signing, dependency license scan | not part of P01 CI | NOT RUN | NEXT-005 (#24) |
+| 6. ADR review and acceptance | not done | NOT RUN | owner, after P01 |
+
+## Limitations assigned to NEXT-017 (#28)
+
+What the mTLS spike deliberately does not do. None of this should be assumed to work in the
+real gateway.
+
+- Revocation state is in memory of one process: no persistence across restarts, no propagation
+  to several replicas, no CRL/OCSP or other distribution. → NEXT-017 (#28)
+- No keepalive or idle policy for half-dead peers: `keepalive.ServerParameters` and
+  `keepalive.EnforcementPolicy` are not configured. → NEXT-017 (#28)
+- No per-stream send timeouts and no bounded outbound queue: a slow reader is only stopped by
+  HTTP/2 flow control or by revocation. → NEXT-017 (#28)
+- No limit on concurrent streams per connection or per identity. → NEXT-017 (#28)
+- Duplicate concurrent connections for one certificate are not detected; docs/13 requires
+  freezing the identity on two simultaneous streams for the same certificate. → NEXT-017 (#28)
+- Reconnect behaviour under load (reconnect storms, many agents) and production backoff
+  values are not tested. → NEXT-050
+- The reverse-proxy topology (TLS passthrough versus verified termination) is not tested. →
+  NEXT-017 (#28), NEXT-047 (#36)
+- The server's `WriteTimeout` of 30 s in the HTTP hub must be revisited for SSE (P02/P05, per-handler
+  `http.ResponseController` deadlines or none); it
+  does not apply to the gRPC spike.
+
 ## Findings relevant to the NEXT-002 decision
 
 - SvelteKit 3 no longer reads `svelte.config.js` and removed `$lib`; configuration lives in
@@ -176,11 +228,11 @@ were not scanned: NOT RUN (the license scan is a pre-distribution item for P02).
   blockers; the SPA fallback needs one CSP script hash that must be derived per build.
 - Revocation state is in memory; a persistent revocation list and a CRL/OCSP-like distribution
   decision belong to NEXT-006 and the CA design.
-- Revocation in the spike ends the affected streams and rejects new RPCs, but does not close
-  the underlying TCP/TLS connection. NEXT-017 must close the transport on revoke
-  (docs/03-architecture.md requires that revocation closes the existing connection).
-- The server's `WriteTimeout` of 30 s will have to be revisited (per-handler
-  `http.ResponseController` deadlines or none) for SSE endpoints in P02/P05.
+- Revocation in the spike ends the affected streams, rejects new RPCs and closes the
+  underlying TCP/TLS connection (server credentials are wrapped so every verified connection
+  is registered by certificate serial). A first version only signalled the handler loop, which a
+  handler blocked in `Send` under flow control never reached; the backpressure test caught
+  that and fails without the transport close.
 - SPA fallback treats a missing path as a 404 only under `/_app/` or with a static-asset
   extension (js, mjs, css, map, json, txt, ico, png, svg, webp, jpg, woff, woff2,
   webmanifest, wasm, html); dotted application routes such as `/tasks/linux.facts` fall back

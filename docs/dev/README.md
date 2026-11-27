@@ -75,10 +75,11 @@ committed. `make proto-check` regenerates and fails when `git status` shows any 
 
 `internal/spike/mtls` is non-normative: TLS 1.3 minimum, mandatory verified client
 certificates with an explicit clientAuth EKU, ALPN `h2`, 256 KiB message limit, and an
-in-memory revocation set checked at handshake and on open streams. All certificates are
+in-memory revocation set checked at handshake; revoking also ends open streams and closes the
+transport connection. All certificates are
 generated at test time (ECDSA P-256) in memory or `t.TempDir()`; no key material is
 committed. `TestClientInSeparateProcess` re-executes the test binary (no shell) as the client.
-Known limit: revocation lives in process memory, there is no CRL/OCSP and no persistence.
+Known limits are listed in `docs/dev/spike-results.md` ("Limitations assigned to NEXT-017").
 
 ## Not here yet (P02 and later)
 
