@@ -53,7 +53,7 @@ test.describe('skr terminal input', () => {
 		await page.keyboard.press('Control+L');
 		await expect.poll(() => termText(page)).not.toContain('Available commands');
 		expect(await termText(page)).not.toContain('Technical spike');
-		expect(await termText(page)).toContain('skr >');
+		await expect.poll(() => lastLine(page)).toBe('skr >');
 	});
 
 	test('unknown command prints the no-backend message and never echoes the input', async ({
