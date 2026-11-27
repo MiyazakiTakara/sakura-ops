@@ -1,7 +1,8 @@
 # Database: roles, migrations, queries (NEXT-004)
 
 PostgreSQL 18 (image `postgres:18-trixie`, pinned by digest in the integration tests; the
-same digest as the dev Compose file in `docs/dev/compose.md`, keep the two in step).
+same digest as the dev Compose file in `docs/dev/compose.md`, keep the two in step; the untagged test `TestPostgresDigestMatchesCompose` in
+`test/integration/digest_test.go` runs in `make test` and fails, naming both values, when they differ).
 Nothing here connects to a real instance: tests start a throwaway container.
 
 ## Layout
