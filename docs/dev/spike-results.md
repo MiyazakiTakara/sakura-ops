@@ -177,7 +177,7 @@ done, NOT RUN means nothing done. "Owner" is where the remainder belongs.
 | Gate item | What P01 verified | Status | Owner (NEXT, issue) |
 | --- | --- | --- | --- |
 | 1a. Go HTTP health, static Svelte build served by Go without Node at runtime | `/healthz`, embedded SPA, fallback rules, security headers, CSP without script `unsafe-inline`; handler tests, fuzz; smoke test in CI workflow | PASS | |
-| 1b. "Authorisation for tests" in the minimal server | no authentication exists in P01 | NOT RUN | auth work package; owning NEXT ID and issue to be assigned by the coordinator |
+| 1b. "Authorisation for tests" in the minimal server | no authentication exists in P01 | NOT RUN | NEXT-007 / NEXT-008 (#25) |
 | 1c. Floating skr window with Tab, history, resize, CodeMirror, Svelte reactivity in a browser | line editing, history, Tab and escape filtering unit tested (18 Vitest tests); headless Chrome renders the route (xterm and CodeMirror present); interactive behaviour in a real browser not exercised | PARTIAL | NEXT-006 / NEXT-011 (#24 / #26) |
 | 2a. Proto generation with pinned generator and drift check | `buf` + protoc-gen-go(-grpc) pinned, `make proto-check` fails on drift | PASS (spike schema only) | |
 | 2b. OpenAPI generation and request/response parity | not started | NOT RUN | NEXT-004 / NEXT-006 (#24) |
