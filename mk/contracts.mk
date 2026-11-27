@@ -9,7 +9,7 @@ PROTO_BASE    ?= origin/v2/native-agent-blueprint
 CONTRACT_PATHS := $(OPENAPI_GO) $(OPENAPI_TS) $(AGENT_GO)
 
 .PHONY: contracts openapi-go openapi-ts agent-proto proto-lint proto-breaking \
-	contracts-check contracts-test
+	proto-breaking-test contracts-check contracts-test
 
 ## openapi-go: regenerate the Go types from the OpenAPI document.
 openapi-go:
@@ -26,14 +26,14 @@ agent-proto:
 ## contracts: regenerate every generated contract artifact.
 contracts: openapi-go openapi-ts agent-proto
 
-## proto-breaking: buf breaking (FILE) against the base branch. A file that does not
-## exist on the base yet is new, so there is nothing to break: the check passes.
+## proto-breaking: buf breaking (FILE) against PROTO_BASE. Fails closed when the ref does not
+## resolve or git errors; skips only when the verified base commit has no proto/ module.
 proto-breaking:
-	@if git cat-file -e "$(PROTO_BASE):proto/buf.yaml" 2>/dev/null; then \
-		cd $(AGENT_PROTO) && $(TOOL) buf breaking --against "$(CURDIR)/.git#ref=$(PROTO_BASE),subdir=proto"; \
-	else \
-		echo "proto-breaking: $(PROTO_BASE) has no proto/ module yet; new contract, nothing to compare"; \
-	fi
+	@BUF='$(TOOL) buf' sh scripts/proto-breaking.sh "$(PROTO_BASE)" "$(CURDIR)"
+
+## proto-breaking-test: tests for scripts/proto-breaking.sh in temporary git repos.
+proto-breaking-test:
+	@BUF='$(TOOL) buf' sh scripts/proto-breaking_test.sh
 
 ## contracts-test: contract tests on both sides (Go and Vitest).
 contracts-test:

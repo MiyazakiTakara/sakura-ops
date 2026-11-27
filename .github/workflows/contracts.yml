@@ -38,3 +38,4 @@ jobs:
       - run: make web-install
       - run: make contracts-check
       - run: make contracts-test
+      - run: make proto-breaking-test

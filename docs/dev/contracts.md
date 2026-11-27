@@ -51,6 +51,7 @@ make contracts          # regenerate OpenAPI Go + TS types and the agent proto G
 make contracts-check    # contracts + proto-breaking, then fail if git sees any diff in generated paths
 make contracts-test     # Go and Vitest contract tests (fixtures validated on both sides)
 make proto-breaking     # buf breaking (FILE) against origin/v2/native-agent-blueprint
+make proto-breaking-test # scripts/proto-breaking_test.sh: fail-closed and post-bootstrap cases
 ```
 
 `contracts-check` also runs `buf lint` (STANDARD, via `make agent-proto`). Two rules are
@@ -62,11 +63,32 @@ Drift: the generators are pinned (oapi-codegen and buf plugins in `tools/go.mod`
 `openapi-typescript` exact-pinned in `frontend/package-lock.json`). CI regenerates and fails
 when the committed output differs, so a YAML or `.proto` edit without regeneration cannot merge.
 
-Breaking: `proto-breaking` runs `buf breaking` with rule set FILE against the `proto/` module on
-`PROTO_BASE` (default `origin/v2/native-agent-blueprint`; override with `make PROTO_BASE=<ref>`).
-While the base ref has no `proto/buf.yaml` (the first PR that adds it) the target prints a note
-and passes, because a new contract has nothing to break. After the first merge it compares for real.
+Breaking: `proto-breaking` (`scripts/proto-breaking.sh`) runs `buf breaking` with rule set FILE
+against the `proto/` module on `PROTO_BASE` (default `origin/v2/native-agent-blueprint`; override
+with `make PROTO_BASE=<ref>`). It fails closed:
+
+1. `PROTO_BASE` is resolved with `git rev-parse --verify --quiet <ref>^{commit}`. If it does not
+   resolve (missing ref, shallow clone gap, git error) the target prints an error naming the ref
+   and exits non-zero. It never skips here.
+2. On the resolved commit SHA, `git ls-tree --name-only <sha> -- proto/buf.yaml` decides whether
+   the module exists. A git error fails the target.
+3. The single skip condition: a verified commit that genuinely lacks `proto/buf.yaml` (the first
+   PR that adds the module). The message prints the resolved SHA. Nothing to break in a new contract.
+4. Otherwise `buf breaking` runs against that SHA (not the symbolic ref).
+
+CI checks out with `fetch-depth: 0` so the base ref resolves; no step relies on a skip.
+`make proto-breaking-test` builds temporary git repos (no network) and covers: unresolvable base,
+base without the module (skip + SHA), post-bootstrap compatible change (passes), post-bootstrap
+breaking change (buf fails), and non-commit object / non-git directory / missing tree object
+(fail). It uses the pinned buf from `tools/go.mod` and runs in the contracts workflow.
 There is no breaking check for OpenAPI yet.
+
+## What the schema does not enforce
+
+The round-trip and unknown-`oneof` tests in `internal/agentproto` are wire-format evidence only.
+Validation of messages that mix known and unknown fields, handling of unknown enum values,
+version negotiation, signature verification and fencing are implementation gates, not enforced
+by the schema. They are tracked in the hub and agent protocol issues.
 
 ## npm `overrides` for openapi-typescript
 
