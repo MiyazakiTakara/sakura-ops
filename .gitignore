@@ -35,3 +35,7 @@ internal/webui/dist/*
 
 # Generated development secrets (docs/dev/compose.md)
 .dev-secrets/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/

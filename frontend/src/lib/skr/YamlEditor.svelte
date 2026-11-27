@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { yaml } from '@codemirror/lang-yaml';
+	import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 	import { EditorState } from '@codemirror/state';
 	import { EditorView } from '@codemirror/view';
+	import { tags as t } from '@lezer/highlight';
 	import { basicSetup } from 'codemirror';
 	import { onMount } from 'svelte';
 
@@ -28,6 +30,17 @@
 		{ dark: true }
 	);
 
+	// Token colours from the DESIGN.md palette; the default highlight style is made for light
+	// backgrounds and fails WCAG AA contrast on the dark editor.
+	const highlight = HighlightStyle.define([
+		{ tag: [t.propertyName, t.keyword, t.definition(t.propertyName)], color: '#d9a0b7' },
+		{ tag: [t.string, t.content], color: '#98cfa8' },
+		{ tag: [t.number, t.bool, t.null, t.atom], color: '#e9bc83' },
+		{ tag: [t.comment, t.lineComment], color: '#b9c1cb', fontStyle: 'italic' },
+		{ tag: [t.meta, t.typeName, t.labelName], color: '#e9bc83' },
+		{ tag: [t.punctuation, t.separator, t.brace, t.squareBracket], color: '#f0f2f5' }
+	]);
+
 	onMount(() => {
 		const view = new EditorView({
 			parent: host,
@@ -37,6 +50,7 @@
 					basicSetup,
 					yaml(),
 					theme,
+					syntaxHighlighting(highlight),
 					EditorView.contentAttributes.of({ 'aria-label': label })
 				]
 			})
