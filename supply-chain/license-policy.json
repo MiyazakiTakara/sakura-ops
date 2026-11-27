@@ -21,13 +21,13 @@
       "purl": "pkg:golang/github.com/getkin/kin-openapi@v0.153.0",
       "license": "MIT AND sha256:f03c4ca07f75350cd046bb70344cf31e9ebff3e22bda9be4be92fcd6491715f8",
       "reason": "Detection artefact. The module LICENSE is MIT. The hashed entry is the Go source file openapi3/license.go (the OpenAPI License object type), which syft misreads as a licence text. Used only by the OpenAPI contract test (internal/api), not linked into the server binary. The hash pins that file, so a changed file needs a new review.",
-      "reviewer": "coordinator review 2026-11-27 (PR #48 stack); owner confirmation requested"
+      "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
     },
     {
       "purl": "pkg:golang/go.yaml.in/yaml/v4@v4.0.0",
       "license": "Apache-2.0 AND sha256:257bb2d062ee0b9226e3b5f9c3c5d6aa3d38a450df27a9e060f061d4d4a4eb6f",
       "reason": "Detection artefact. LICENSE is Apache-2.0. The hashed entry is NOTICE, which states that the files ported from libyaml stay under MIT; the effective licence is Apache-2.0 AND MIT, both allowlisted. Indirect dependency of kin-openapi (contract test only). The hash pins that NOTICE, so a changed file needs a new review.",
-      "reviewer": "coordinator review 2026-11-27 (PR #48 stack); owner confirmation requested"
+      "reviewer": "owner approved 2026-11-27; coordinator review and file hash evidence in docs/dev/licence-exceptions.md"
     }
   ]
 }
