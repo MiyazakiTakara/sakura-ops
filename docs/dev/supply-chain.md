@@ -70,8 +70,11 @@ File: `supply-chain/license-policy.json` (JSON so the checker needs only the sta
   An exception applies only if the component's `purl` equals the exception `purl` exactly and its
   evaluated licence equals `license`; a different version, ecosystem or licence is still a finding
   and a component without a `purl` can never be waived. The policy is rejected at load for a
-  missing field, a versionless or non-purl `purl`, a duplicate `purl` and unknown fields. The list
-  is empty. An exception that waives nothing is a **failure** (exit 1), so stale waivers get
+  missing field, a versionless or non-purl `purl`, a duplicate `purl` and unknown fields. Current
+  entries: two Go detection artefacts in the contract-test dependencies, where syft reports a file
+  it cannot classify as `sha256:<hash>` (kin-openapi `openapi3/license.go`, a source file;
+  go-yaml v4 `NOTICE`, Apache-2.0 plus MIT for the libyaml port). Both real licences are
+  allowlisted, and the hash pins the reviewed file. An exception that waives nothing is a **failure** (exit 1), so stale waivers get
   removed.
 
 Evaluation (`internal/licensecheck`, unit tested):
