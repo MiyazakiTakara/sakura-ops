@@ -17,3 +17,5 @@ internal/webui/dist/*
 .env
 .env.*
 *.test
+frontend/test-results
+frontend/playwright-report
