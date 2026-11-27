@@ -1,5 +1,7 @@
 # 10. ADR-002: jednolity stack Go + Svelte
 
+Formalny zapis decyzji (status Accepted, 2026-11-27): [ADR-0002](adr/0002-stack-go-svelte-postgres.md). Status propozycji poniżej jest historyczny; odroczone bramki weryfikacji nadal obowiązują.
+
 Status: propozycja techniczna po decyzji właściciela o zmianie stacku (27.11.2026), do zatwierdzenia przed rozpoczęciem implementacji. Zakres bez zmian: Linux-only, browser-only, własny agent, pływający terminal skr, wbudowane zadania, opcjonalny SSH WWW/Git/Keycloak, jedna VM na start. Nie jest to wynik benchmarków ani gotowy system.
 
 ## Decyzja i uzasadnienie
