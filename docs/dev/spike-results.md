@@ -3,7 +3,7 @@
 Raw measurements from one machine on 2026-11-27. They are not benchmarks of the product,
 not a comparison with any other stack, and no thresholds were derived from them
 (docs/17-testing.md). Code measured: commit `b5d38fdeae8431c6e4c1191da4d896333344549b`
-(later commits on the branch only add documentation).
+(test results below were rerun at `a9e702c`, which adds a goroutine-leak fix and an SPA routing fix; later commits only add documentation).
 
 ## Environment
 
@@ -67,17 +67,17 @@ So about 0.75 ms per full handshake and about 0.11 ms per small unary call on th
 Cross-host latency, handshake through a reverse proxy, and many concurrent agents: NOT RUN
 (no lab network or proxy in this session).
 
-## Test results (commit b5d38fd)
+## Test results (commit a9e702c)
 
 | Command | Result |
 | --- | --- |
-| `go test -race -count=1 -v ./...` | 49 PASS lines, 0 FAIL, 0 SKIP: 23 top-level tests and 26 subtests (httpserver 13+16, spike/mtls 10+10) |
+| `go test -race -count=1 -v ./...` | 50 PASS lines, 0 FAIL, 0 SKIP: 24 top-level tests and 26 subtests (httpserver 13+16, spike/mtls 11+10) |
 | `make fuzz-short` | `FuzzCleanAssetPath` 574 411 execs and `FuzzSPAHandlerNeverLeaks` 581 076 execs in 10 s each, no failures |
 | `make web-check` | svelte-check: 0 errors, 0 warnings (224 files); `prettier --check` clean; vitest: 1 file, 18 tests passed |
 | `make staticcheck`, `make vet`, `make fmt-check` | clean |
 | `make proto-check` | clean; verified to fail when the schema changes without regeneration |
 | `make vuln` | No vulnerabilities found (after bumping `golang.org/x/net` to v0.63.0; before the bump two unreachable advisories, GO-2026-6866 and GO-2026-6860, were reported in x/net v0.60.0) |
-| `make secrets` | gitleaks 8.30.1, 29 commits scanned, no leaks found |
+| `make secrets` | gitleaks 8.30.1, no leaks found over the branch history |
 | `npm audit` | 0 vulnerabilities |
 
 `TestHelperClientProcess` shows as PASS in a normal run because it returns immediately unless
@@ -176,5 +176,14 @@ were not scanned: NOT RUN (the license scan is a pre-distribution item for P02).
   blockers; the SPA fallback needs one CSP script hash that must be derived per build.
 - Revocation state is in memory; a persistent revocation list and a CRL/OCSP-like distribution
   decision belong to NEXT-006 and the CA design.
+- Revocation in the spike ends the affected streams and rejects new RPCs, but does not close
+  the underlying TCP/TLS connection. NEXT-017 must close the transport on revoke
+  (docs/03-architecture.md requires that revocation closes the existing connection).
+- The server's `WriteTimeout` of 30 s will have to be revisited (per-handler
+  `http.ResponseController` deadlines or none) for SSE endpoints in P02/P05.
+- SPA fallback treats a missing path as a 404 only under `/_app/` or with a static-asset
+  extension (js, mjs, css, map, json, txt, ico, png, svg, webp, jpg, woff, woff2,
+  webmanifest, wasm, html); dotted application routes such as `/tasks/linux.facts` fall back
+  to `index.html`.
 - HTTP/2 and ALPN were verified on a direct connection only; the target reverse-proxy
   topology (docs/10-stack.md gate 3) is NOT RUN.
