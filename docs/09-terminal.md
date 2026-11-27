@@ -75,3 +75,7 @@ Po oddzielnym odbiorze modułu 06-remote-access.md akcja Połącz SSH dodaje kar
 - Reuse: każdy przenoszony moduł z main wymaga przeglądu, adaptacji i nowych testów; nie kopiować bezpośrednio legacy execution ani starych baz z sekretami.
 
 Dopiero po powyższych testach uznajemy odpowiednią funkcję za dostarczoną. Nie wykonywano ich w gałęzi dokumentacyjnej.
+
+## Implementacja w nowym stacku (ADR-002)
+
+Parser i rejestr poleceń w Go, współdzielone DTO i usługi z REST API; CLI Cobra tylko jako klient API, nie duplikacja polityki. Svelte store dla geometrii i stanu okna; xterm.js dla terminala, CodeMirror 6 dla edytora. Nie uruchamiać Node na produkcji. Testy regresji starych zachowań przez Vitest/Playwright i Go, bez kopiowania starego parsera Python w runtime. Kontrolowany skr przez REST i SSE, prawdziwy SSH przez oddzielny WSS gateway. Zachowanie i uprawnienia nie zmieniają się przy wymianie stacku.

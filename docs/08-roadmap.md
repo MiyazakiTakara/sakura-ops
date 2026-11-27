@@ -4,10 +4,10 @@ Identyfikatory NEXT są zadaniami planu, nie utworzonymi GitHub Issues. Realizow
 
 ## 0. Fundament (NEXT-001..006)
 - 001 ADR: zatwierdzenie modelu agent/hub zamiast Ansible, zakres Linux-only i terminala WWW, model zagrożeń i granice.
-- 002 ADR stack i licencje, protokół mTLS/WS vs gRPC, signer/issuer, wersje i kompatybilność OS, komponenty terminala WWW i licencje.
-- 003 Monorepo, lockfiles Python/Go/Node, lint/typecheck, .gitignore, secret scanning, minimalny README dev.
+- 002 ADR-002 Go/Svelte/PostgreSQL i licencje, gRPC HTTP/2/mTLS, REST/OpenAPI/SSE, WSS tylko SSH, signer/issuer, wersje OS, komponenty terminala, spike zgodności zgodnie z 10-stack.md.
+- 003 Monorepo, go.mod/go.sum, Node lockfile, toolchain Protobuf/sqlc/Goose, lint/typecheck, .gitignore, secret scanning, minimalny README dev.
 - 004 Compose dev, izolowana sieć lab, health, PostgreSQL migrations od pustej bazy.
-- 005 CI PR: unit, integration, build, security scan, artefakty bez sekretów.
+- 005 CI PR: go test/race/fuzz, govulncheck, svelte-check/Vitest/Playwright, migracje na PostgreSQL, proto/OpenAPI/codegen drift, build, security scan, artefakty bez sekretów.
 - 006 UX shell prototype, kontrakt OpenAPI i schemat protokołu, testy kontraktu cross-language.
 Odbiór: świeży clone w lab uruchamia health i CI; zero dostępu do zdalnych hostów.
 
@@ -128,7 +128,7 @@ Definition of Done: code review, CI PASS rzeczywiście zweryfikowane, kryteria a
 ## Decyzje do akceptacji przed implementacją
 
 - Model agent/hub bez Ansible; Linux-only, browser-only i terminal skr są ustalone. SSH w przeglądarce jako odrębny moduł po MVP diagnostycznym.
-- Dokładny stack, protokół streaming, issuer/signer, mechanizm rotacji i ograniczenia lokalnego helpera.
+- Akceptacja proponowanego ADR-002 i spike Go/Svelte/gRPC, issuer/signer, mechanizm rotacji i ograniczenia lokalnego helpera.
 - Konkretny komponent terminala WWW, mechanizm indywidualnego uwierzytelnienia SSH i odrębny gateway podlegają ADR; bez klienta natywnego.
 - Macierz OS/wersji, sieci i limity na podstawie testów, retencja.
 - Czy i kiedy broker sesji za NAT jest naprawdę potrzebny; bezpieczeństwo przed wygodą tunelowania.

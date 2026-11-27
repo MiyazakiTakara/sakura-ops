@@ -30,8 +30,12 @@ Awaria huba: agent nie uruchamia autonomicznych nowych operacji ani nie przyjmuj
 
 ## Upgrade centralny i agenta
 
-Release notes, test migracji Alembic, miejsce, backup, wstrzymanie nowych runów i drain, wstrzymaj brokera zgodnie z oknem. Pobranie podpisanych obrazów, migracja, health, smoke localhost i lab agent, kompatybilność protokołu N/N-1 tylko jeśli przetestowana, aktywacja harmonogramów po review. Rollback obrazu tylko gdy schema kompatybilna; inaczej odtworzenie backupu z jawnym RPO i reconciliacją. Nie obiecywać bezprzerwowego upgrade na jednej VM. Agent najpierw ręczny upgrade podpisanym pakietem; centralny upgrade później osobnym ograniczonym helperem i testem canary/recovery. Panel i terminal aktualizowane razem z kontrolerem; nie ma osobnych wydań klienta desktopowego. SSH gateway ma osobny health check, drain, test revoke i zgodność z wersją UI.
+Release notes, test migracji Goose (osobny jednorazowy migrator, advisory lock, minimalne uprawnienia), miejsce, backup, wstrzymanie nowych runów i drain, wstrzymaj brokera zgodnie z oknem. Pobranie podpisanych obrazów, migracja, health, smoke localhost i lab agent, kompatybilność protokołu N/N-1 tylko jeśli przetestowana, aktywacja harmonogramów po review. Rollback obrazu tylko gdy schema kompatybilna; inaczej odtworzenie backupu z jawnym RPO i reconciliacją. Nie obiecywać bezprzerwowego upgrade na jednej VM. Agent najpierw ręczny upgrade podpisanym pakietem; centralny upgrade później osobnym ograniczonym helperem i testem canary/recovery. Panel i terminal aktualizowane razem z kontrolerem; nie ma osobnych wydań klienta desktopowego. SSH gateway ma osobny health check, drain, test revoke i zgodność z wersją UI.
 
 ## Produkcja
 
 Plan nie zatwierdza żadnych zmian na żywych serwerach. Produkcja wymaga jawnej akceptacji właściciela, sieciowych granic, testu restore, ręcznego pilota odczytowego i osobnej zgody na helper/remote access. Dla krytycznych usług zależności i okna zatwierdza właściciel. Utrzymać możliwość powrotu do dotychczasowego systemu bez podwójnego wykonywania zmian.
+
+## Runtime v2 (propozycja)
+
+Wielostopniowy build: SvelteKit static + Vite w etapie Node, kompilacja Go z wbudowanym frontendem i migracjami, osobne artefakty agent/gateway/helper/issuer/signer/worker. Node i Python nie są potrzebne w kontenerach runtime. W produkcji PostgreSQL, reverse proxy, hub i wydzielone procesy zgodnie z granicami zaufania. Agent jako podpisany pakiet/binarka systemd, bez kontenera i osobnego interpretera. gRPC wymaga HTTP/2/ALPN; oddzielny endpoint urządzeń z bezpośrednim mTLS lub zatwierdzonym passthrough. NPM może obsługiwać WWW, ale nie zakładać obsługi mTLS urządzeń bez testu. Szczegóły 10-stack.md.

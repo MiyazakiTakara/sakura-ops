@@ -4,6 +4,10 @@
 
 SakuraOps Next to proponowany własny, self-hosted system zarządzania infrastrukturą z centralnym panelem WWW, lekkim agentem instalowanym na serwerach oraz wbudowanym terminalem WWW. Zakres całej obecnej roadmapy: wyłącznie zarządzane serwery Linux, bez aplikacji desktopowej. W tym wariancie rezygnujemy z Ansible jako zależności wykonawczej. Ansible nie jest potrzebny do konfiguracji, dodawania hostów ani uruchamiania zadań. Ewentualna integracja z istniejącymi playbookami to osobny temat po MVP.
 
+## Proponowany stack v2
+
+Go (hub, agent, worker, gateway, signer, opcjonalny CLI), Svelte 5 + TypeScript z Vite i statycznym SvelteKit, PostgreSQL + pgx/sqlc + Goose, gRPC/Protobuf/mTLS dla agentów, REST/OpenAPI i SSE dla GUI/CLI, WSS dla SSH. xterm.js i CodeMirror 6 zachowują poprzedni terminal i edytor. Docker Compose i systemd na hostach. Node.js wyłącznie w build/CI, nie jako usługa produkcyjna. Zmiana stacku jest propozycją do zatwierdzenia, szczegóły w [10-stack.md](docs/10-stack.md).
+
 ## Co ma potrafić administrator
 
 - Zainstalować centralny system na jednej VM, zalogować się lokalnie i dodać pierwszy serwer.
@@ -28,6 +32,7 @@ SakuraOps Next to proponowany własny, self-hosted system zarządzania infrastru
 | [07. Instalacja i eksploatacja](docs/07-operations.md) | Compose, konfiguracja, backup, aktualizacje, awarie |
 | [08. Roadmapa i backlog](docs/08-roadmap.md) | Etapy, zadania, testy, bramki wydania |
 | [09. Terminal i zgodność z poprzednią iteracją](docs/09-terminal.md) | skr, tryby, polecenia, edytor, Git, migracja i testy |
+| [10. Stack i ADR](docs/10-stack.md) | Go, Svelte, kontrakty, wdrożenie i bramka technologiczna |
 | [Przykładowy katalog](examples/task-catalog.yaml) | Makiety danych do projektowania, niewykonywalne |
 | [Przykładowa konfiguracja](examples/config.example.yaml) | Proponowane ustawienia bez sekretów |
 
