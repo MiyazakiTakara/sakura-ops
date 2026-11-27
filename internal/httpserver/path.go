@@ -39,7 +39,7 @@ func isReserved(urlPath string) bool {
 	if i := strings.IndexByte(first, '/'); i >= 0 {
 		first = first[:i]
 	}
-	return strings.EqualFold(first, "api") || strings.EqualFold(first, "healthz")
+	return strings.EqualFold(first, "api") || strings.EqualFold(first, "healthz") || strings.EqualFold(first, "readyz")
 }
 
 // staticExtensions are file extensions that denote a static asset. A missing

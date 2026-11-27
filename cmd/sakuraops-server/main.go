@@ -29,9 +29,15 @@ func main() {
 }
 
 func run(addr string, log *slog.Logger) error {
+	dbOpts, closeDB, err := databaseOptions(context.Background(), *databaseURLFile, log)
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           httpserver.New(webui.FS()),
+		Handler:           httpserver.New(webui.FS(), dbOpts...),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

@@ -15,11 +15,24 @@ import (
 
 const immutablePrefix = "_app/immutable/"
 
+// Option customises the handler built by New.
+type Option func(*server)
+
+// WithReadiness enables /readyz backed by r. Without it /readyz answers 503
+// db_not_configured.
+func WithReadiness(r Readiness) Option {
+	return func(s *server) { s.ready = r }
+}
+
 // New returns the hub handler serving webFS (index.html at its root).
-func New(webFS fs.FS) http.Handler {
+func New(webFS fs.FS, opts ...Option) http.Handler {
 	s := &server{web: webFS, csp: contentSecurityPolicy(webFS)}
+	for _, o := range opts {
+		o(s)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.healthz)
+	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/api", s.apiNotFound)
 	mux.HandleFunc("/api/", s.apiNotFound)
 	mux.HandleFunc("/", s.spa)
@@ -27,8 +40,9 @@ func New(webFS fs.FS) http.Handler {
 }
 
 type server struct {
-	web fs.FS
-	csp string
+	web   fs.FS
+	csp   string
+	ready Readiness
 }
 
 func (s *server) middleware(next http.Handler) http.Handler {
