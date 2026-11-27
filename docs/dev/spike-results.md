@@ -196,8 +196,9 @@ done, NOT RUN means nothing done. "Owner" is where the remainder belongs.
 | 4a. Go build for the test architecture; RSS, CPU, size, latency on described hardware | linux/amd64 on one WSL2 laptop, single runs, see sections above | PARTIAL | NEXT-050 |
 | 4b. arm64 build and measurements; target hardware | not built, not measured | NOT RUN | NEXT-050 / NEXT-071 |
 | 5a. CI on pull requests only: go test, race, govulncheck, lint, proto drift, svelte-check, Vitest, build | `.github/workflows/ci.yml`; GitHub run [46009364154](https://github.com/MiyazakiTakara/sakura-ops/actions/runs/46009364154), event `pull_request`, head `4a309e4`: jobs Go, Web and embedded build, Secret scan all `success` | PASS | |
-| 5b. Fuzzing in CI, sqlc/OpenAPI drift, Playwright, PostgreSQL integration, SBOM, artefact signing, dependency license scan | not part of P01 CI | NOT RUN | NEXT-005 (#24) |
-| 6. ADR review and acceptance | not done | NOT RUN | owner, after P01 |
+| 5b. Fuzzing in CI, sqlc/OpenAPI drift, Playwright, PostgreSQL integration, SBOM, dependency license scan | not part of P01 CI | NOT RUN | NEXT-005 (#24) |
+| 5c. Release artefact signing (per docs/19-release-plan.md) | not part of P01 | NOT RUN | NEXT-024 (#30), NEXT-046 (#36) |
+| 6. ADR review and acceptance | ADR-0001 and ADR-0002 accepted by the owner on 2026-11-27 (PR #45); acceptance covers the direction only, deferred rows above stay open | PASS | |
 
 ## Limitations assigned to NEXT-017 (#28)
 

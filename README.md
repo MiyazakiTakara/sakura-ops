@@ -50,7 +50,7 @@ Go (hub, agent, worker, gateway, signer, opcjonalny CLI), Svelte 5 + TypeScript 
 | [23. API](docs/23-api-contract.md) | REST/SSE, skr i endpointy |
 | [24. Aktualizacje](docs/24-updates.md) | Audyt, zmiany, okna |
 | [25. Backlog](docs/25-backlog.md) | Pakiety PR i zależności |
-| [ADR](docs/adr/README.md) | Rejestr decyzji architektonicznych (ADR-0001, ADR-0002: Proposed) |
+| [ADR](docs/adr/README.md) | Rejestr decyzji architektonicznych (ADR-0001, ADR-0002: Accepted) |
 | [Dev setup](docs/dev/README.md) | Środowisko deweloperskie, `make check`, spike P01 (po angielsku) |
 | [Schema v1](schemas/sakura-task-v1.schema.json) | Projekt walidacji struktury |
 | [Wbudowane zadania](builtin/tasks/) | Deklaracje projektowe wszystkich 18 pozycji katalogu |

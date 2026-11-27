@@ -1,9 +1,13 @@
 # ADR-0001: Własny agent i hub, Linux-only, browser-only
 
-- Status: **Proposed** (akceptacja oczekuje na właściciela)
+- Status: **Accepted** (właściciel, 2026-11-27, PR #45)
 - Data: 2026-11-27
 - Decydent: właściciel projektu
 - Zakres NEXT: NEXT-001. Konsoliduje ADR-000 i ADR-001 z [01-audit.md](../01-audit.md).
+
+## Zakres akceptacji
+
+Właściciel zaakceptował 2026-11-27 kierunek architektoniczny i technologiczny. Spike P01 jest wyłącznie **dowodem wykonalności**, nie odbiorem produktu ani bramki wydania. Odroczone bramki weryfikacji pozostają **obowiązkowe** na swoich etapach i nie zostały uchylone; niepowodzenie którejś wymaga korekty lub nowego ADR. Akceptacja nie upoważnia do dostępu produkcyjnego, instalacji na rzeczywistych hostach, helpera uprzywilejowanego ani SSH.
 
 ## Kontekst
 
@@ -47,6 +51,6 @@ Aplikacja desktopowa, Windows i inne OS, Ansible jako runtime, dowolne skrypty i
 
 Akceptacja potwierdza kierunek architektury i pozwala kontynuować pakiety implementacyjne w lab. **Nie upoważnia** do dostępu produkcyjnego, instalacji agenta na rzeczywistych hostach, helpera uprzywilejowanego, sesji SSH ani zmian na hostach; każde z nich wymaga odrębnej zgody właściciela i gate.
 
-## Kryteria akceptacji
+## Akceptacja
 
-Przegląd właściciela tego ADR, [01-audit.md](../01-audit.md) i [20-threat-model.md](../20-threat-model.md). Zmiana decyzji po akceptacji: nowy ADR (patrz [README](README.md)).
+Zaakceptowany przez właściciela 2026-11-27 po przeglądzie tego ADR, [01-audit.md](../01-audit.md) i [20-threat-model.md](../20-threat-model.md). Zmiana decyzji: nowy ADR (patrz [README](README.md)).

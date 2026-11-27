@@ -1,10 +1,14 @@
 # ADR-0002: Stack Go + Svelte + PostgreSQL
 
-- Status: **Proposed** (akceptacja oczekuje na właściciela)
+- Status: **Accepted** (właściciel, 2026-11-27, PR #45)
 - Data: 2026-11-27
 - Decydent: właściciel projektu
 - Zakres NEXT: NEXT-002. Oparty na [10-stack.md](../10-stack.md), uzupełniony o wyniki spike P01 ([spike-results.md](../dev/spike-results.md)).
 - Zależy od: [ADR-0001](0001-agent-hub-linux-browser-only.md).
+
+## Zakres akceptacji
+
+Właściciel zaakceptował 2026-11-27 kierunek architektoniczny i technologiczny. Spike P01 jest wyłącznie **dowodem wykonalności**, nie odbiorem produktu ani bramki wydania. Odroczone bramki weryfikacji pozostają **obowiązkowe** na swoich etapach i nie zostały uchylone; niepowodzenie którejś wymaga korekty lub nowego ADR. Akceptacja nie upoważnia do dostępu produkcyjnego, instalacji na rzeczywistych hostach, helpera uprzywilejowanego ani SSH.
 
 ## Kontekst
 
@@ -40,7 +44,7 @@ Pozostałe elementy bez zmian względem [10-stack.md](../10-stack.md):
 | TypeScript 6 | `^6.0.3`, nie 7.x | SvelteKit 3.4.1 ma peer `typescript ^6.0.0`; 7.x dawało ERESOLVE, nie wymuszono. |
 | Konfiguracja SvelteKit 3 | w `vite.config.ts`, tsconfig rozszerza `$app/tsconfig`, brak `$lib` | `svelte.config.js` i `$lib` zostały usunięte w SvelteKit 3. Ekosystem szybko się zmienia: lockfile obowiązkowy. |
 | Osadzanie UI | `internal/webui/dist` kopiowane przez `make web-build`, w git tylko `.gitkeep` | `go:embed` nie sięga poza pakiet; czysty checkout kompiluje się i testuje, serwer zwraca 503 `frontend_not_built` dla tras aplikacji. |
-| CSP | hashe `sha256-` skryptów liczone z osadzonego `index.html` przy starcie; `style-src 'unsafe-inline'` | Skrypt startowy SvelteKit zawiera znacznik wersji zmienny w każdym buildzie. `unsafe-inline` dla stylów jest **zaakceptowanym, udokumentowanym ryzykiem** (atrybuty style Svelte i xterm.js); nie obejmuje skryptów. |
+| CSP | hashe `sha256-` skryptów liczone z osadzonego `index.html` przy starcie; `style-src 'unsafe-inline'` | Skrypt startowy SvelteKit zawiera znacznik wersji zmienny w każdym buildzie. Wyjątek `style-src 'unsafe-inline'` (atrybuty style Svelte i xterm.js) został **jawnie zaakceptowany przez właściciela** wraz z tym ADR 2026-11-27. `script-src` pozostaje bez `unsafe-inline` i `unsafe-eval`; rozluźnienie wymaga nowego ADR. |
 | sqlc | uruchamiany przez `go tool`; zbudował się i działa **bez CGO** (zweryfikowane `CGO_ENABLED=0 ... sqlc version` -> v1.31.1) | Brak potrzeby obejść. gcc jest potrzebny tylko dla detektora wyścigów (`go test -race`). |
 | Moduł narzędzi | osobny `tools/go.mod` z dyrektywami `tool` | Narzędzia dev nie wchodzą do grafu zależności produkcyjnych. |
 | Rozmiar bundla | trasa spike 767 KB raw / 222 KB gzip | Do optymalizacji w NEXT-011 (podział xterm.js/CodeMirror na trasy). |
@@ -71,7 +75,8 @@ Pełna tabela statusów: [spike-results.md, "Technology gate status"](../dev/spi
 | Tożsamość agenta i trwałość odwołań (persistencja, wiele replik, CRL/OCSP, keepalive, limity strumieni, duplikaty połączeń) | NEXT-017 (#28) |
 | Obciążenie i reconnect storm | NEXT-050 |
 | arm64 i sprzęt docelowy | NEXT-050 / NEXT-071 |
-| Pełne CI: fuzz w CI, Playwright, integracja PostgreSQL, SBOM, skan licencji, podpisy artefaktów | NEXT-005 (#24) |
+| Pełne CI: fuzz w CI, Playwright, integracja PostgreSQL, SBOM, skan licencji | NEXT-005 (#24) |
+| Podpisy artefaktów wydania (zgodnie z [19-release-plan.md](../19-release-plan.md)) | NEXT-024 (#30), NEXT-046 (#36) |
 | Uwierzytelnianie testowe w minimalnym serwerze | NEXT-007 / NEXT-008 (#25) |
 
 ## Rozważone alternatywy
@@ -86,11 +91,8 @@ Pełna tabela statusów: [spike-results.md, "Technology gate status"](../dev/spi
 - Jeden język serwerowy i agenta, jedna binarka huba z osadzonym UI, brak Node w runtime. Go nie jest automatycznie szybsze ani bezpieczniejsze: korzyścią jest mniej środowisk wykonawczych, nie obiecujemy zerowego zużycia zasobów ani przewagi liczbowej.
 - Szybko zmieniający się SvelteKit/Vite wymaga przypiętych wersji, lockfile i przeglądu przy każdej aktualizacji.
 - Zależność od utrzymania gRPC i generatorów; dryf generowanego kodu pilnowany w CI.
-- Dwa ryzyka jawnie przyjęte: `style-src 'unsafe-inline'` oraz rozmiar bundla spike.
+- Dwa ryzyka jawnie przyjęte przez właściciela: `style-src 'unsafe-inline'` oraz rozmiar bundla spike (do NEXT-011).
 
-## Kryteria akceptacji (Proposed → Accepted)
+## Akceptacja
 
-1. Właściciel przegląda [spike-results.md](../dev/spike-results.md) i ten ADR.
-2. Bramki z sekcji "Bramki weryfikacji odroczone" są śledzone w wymienionych issue, ale **nie blokują** akceptacji kierunku (Go + Svelte + PostgreSQL). Blokują odpowiednie późniejsze etapy, jeśli się nie powiodą; wtedy ADR wymaga korekty lub zastąpienia nowym ([README](README.md)).
-
-Ten ADR nie jest zaakceptowany. Akceptacja nie upoważnia do dostępu produkcyjnego, helpera ani SSH.
+Zaakceptowany przez właściciela 2026-11-27 po przeglądzie [spike-results.md](../dev/spike-results.md) i tego ADR (PR #45). Akceptacja dotyczy kierunku (Go + Svelte + PostgreSQL). Bramki z sekcji "Bramki weryfikacji odroczone" są śledzone w wymienionych issue i obowiązują na swoich etapach; nie zostały uchylone ani oznaczone jako zaliczone. Jeśli któraś się nie powiedzie, ADR wymaga korekty lub zastąpienia nowym ([README](README.md)). Akceptacja nie upoważnia do dostępu produkcyjnego, helpera ani SSH.

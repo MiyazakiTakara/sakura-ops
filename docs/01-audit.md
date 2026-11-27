@@ -1,6 +1,6 @@
 # 01. Audyt punktu wyjścia i decyzja o nowym kierunku
 
-Formalny zapis decyzji ADR-000/ADR-001 (status Proposed): [ADR-0001](adr/0001-agent-hub-linux-browser-only.md).
+Formalny zapis decyzji ADR-000/ADR-001 (status Accepted, 2026-11-27): [ADR-0001](adr/0001-agent-hub-linux-browser-only.md).
 
 ## Zakres
 
