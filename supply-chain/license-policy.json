@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "allowed": [
+    { "id": "MIT" },
+    { "id": "BSD-2-Clause" },
+    { "id": "BSD-3-Clause" },
+    { "id": "Apache-2.0" },
+    { "id": "ISC" },
+    { "id": "0BSD" },
+    { "id": "BlueOak-1.0.0" },
+    { "id": "CC0-1.0" },
+    { "id": "Unlicense" },
+    { "id": "Python-2.0" },
+    { "id": "MPL-2.0", "note": "file-level copyleft; allowed for unmodified third-party use only (no patched or forked copies in this repository)" }
+  ],
+  "denied_ids": ["SSPL-1.0", "BUSL-1.1", "Commons-Clause", "NOASSERTION", "NONE", "UNKNOWN"],
+  "denied_prefixes": ["GPL-", "AGPL-", "LGPL-", "SSPL-", "BUSL-", "LicenseRef-"],
+  "first_party": ["github.com/MiyazakiTakara/sakura-ops", "sakuraops-frontend"],
+  "exceptions": []
+}
