@@ -1,0 +1,7 @@
+# oapi-codegen: types only, no server or client runtime.
+package: apitypes
+output: internal/api/apitypes/types.gen.go
+generate:
+  models: true
+output-options:
+  skip-prune: true
