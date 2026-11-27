@@ -52,6 +52,10 @@ type Service struct {
 	onCall   func(PeerInfo)
 	echoWait func(ctx context.Context)
 	recvDone func() // called when a Connect receive goroutine exits
+
+	// Test hooks around Connect: sendStart/sendEnd bracket each stream.Send,
+	// connectDone fires when the handler returns.
+	sendStart, sendEnd, connectDone func()
 }
 
 // NewService returns a Service that terminates streams of revoked certificates.
@@ -84,6 +88,9 @@ func (s *Service) Connect(stream grpc.BidiStreamingServer[spikepb.Ping, spikepb.
 	}
 	if s.onCall != nil {
 		s.onCall(pi)
+	}
+	if s.connectDone != nil {
+		defer s.connectDone()
 	}
 	revoked, done := s.rev.Track(pi.Serial)
 	defer done()
@@ -124,7 +131,16 @@ func (s *Service) Connect(stream grpc.BidiStreamingServer[spikepb.Ping, spikepb.
 			if r.err != nil {
 				return r.err
 			}
-			if err := stream.Send(&spikepb.Pong{Seq: r.ping.GetSeq(), Peer: pi.Name}); err != nil {
+			size := min(int(r.ping.GetReplySize()), MaxMessageSize-1024)
+			pong := &spikepb.Pong{Seq: r.ping.GetSeq(), Peer: pi.Name, Payload: make([]byte, size)}
+			if s.sendStart != nil {
+				s.sendStart()
+			}
+			err := stream.Send(pong)
+			if s.sendEnd != nil {
+				s.sendEnd()
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -132,10 +148,10 @@ func (s *Service) Connect(stream grpc.BidiStreamingServer[spikepb.Ping, spikepb.
 }
 
 // NewServer builds a gRPC server over the mutual-TLS configuration with the
-// 256 KiB receive limit.
-func NewServer(tlsCfg *tls.Config, svc spikepb.SpikeServiceServer) *grpc.Server {
+// 256 KiB message limits; revoking a certificate closes its connections.
+func NewServer(tlsCfg *tls.Config, svc *Service) *grpc.Server {
 	srv := grpc.NewServer(
-		grpc.Creds(credentials.NewTLS(tlsCfg)),
+		grpc.Creds(NewServerCredentials(tlsCfg, svc.rev)),
 		grpc.MaxRecvMsgSize(MaxMessageSize),
 		grpc.MaxSendMsgSize(MaxMessageSize),
 	)

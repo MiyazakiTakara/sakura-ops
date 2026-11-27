@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -123,6 +124,20 @@ func mustCode(t *testing.T, err error, want codes.Code) {
 	if got := status.Code(err); got != want {
 		t.Fatalf("code = %v (%v), want %v", got, err, want)
 	}
+}
+
+func mustCodeIn(t *testing.T, err error, want ...codes.Code) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected one of %v, got success", want)
+	}
+	got := status.Code(err)
+	for _, w := range want {
+		if got == w {
+			return
+		}
+	}
+	t.Fatalf("code = %v (%v), want one of %v", got, err, want)
 }
 
 func TestTwoClientsHaveDistinctVerifiedIdentities(t *testing.T) {
@@ -293,7 +308,9 @@ func TestRevokingClosesOnlyThatClientsStream(t *testing.T) {
 	}()
 	select {
 	case err := <-done:
-		mustCode(t, err, codes.Unauthenticated)
+		// The transport is closed on revoke, so the client may see the status
+		// (Unauthenticated) or the closed connection (Unavailable).
+		mustCodeIn(t, err, codes.Unauthenticated, codes.Unavailable)
 	case <-time.After(5 * time.Second):
 		t.Fatal("revoked stream was not closed")
 	}
@@ -302,9 +319,9 @@ func TestRevokingClosesOnlyThatClientsStream(t *testing.T) {
 	if p, err := sb.roundTrip(99); err != nil || p.Seq != 99 || p.Peer != "agent-b" {
 		t.Fatalf("stream B broken after revoking A: %v %v", p, err)
 	}
-	// A cannot use the still-open connection for new calls either...
+	// A cannot use its connection for new calls either...
 	_, err := echo(connA, 1)
-	mustCode(t, err, codes.Unauthenticated)
+	mustCodeIn(t, err, codes.Unauthenticated, codes.Unavailable)
 	// ...nor open a new connection.
 	_, err = echo(h.dial(t, a), 1)
 	mustCode(t, err, codes.Unavailable)
@@ -330,6 +347,98 @@ func TestRevocationDoesNotLeakReceiveGoroutine(t *testing.T) {
 	case <-exited:
 	case <-time.After(5 * time.Second):
 		t.Fatal("server receive goroutine did not exit after revocation")
+	}
+}
+
+// TestRevokeUnderBackpressure: the client never reads, so the server handler
+// blocks inside Send once flow control is exhausted. Revoking must still end the
+// handler and close the client's connection, without touching another client.
+func TestRevokeUnderBackpressure(t *testing.T) {
+	h := newHub(t)
+	var attempted, completed atomic.Int64
+	handlerDone := make(chan struct{})
+	var once sync.Once
+	h.svc.sendStart = func() { attempted.Add(1) }
+	h.svc.sendEnd = func() { completed.Add(1) }
+	// B's handler stays open until cleanup, so the first handler to return is A's.
+	h.svc.connectDone = func() { once.Do(func() { close(handlerDone) }) }
+	a, b := h.deviceCA.client(t, "agent-slow"), h.deviceCA.client(t, "agent-ok")
+
+	// B connects first and must not be affected; the counters are reset after its
+	// round trip so only A's sends are counted.
+	sb := openStream(t, h.dial(t, b))
+	if _, err := sb.roundTrip(1); err != nil {
+		t.Fatal(err)
+	}
+	attempted.Store(0)
+	completed.Store(0)
+	connA := h.dial(t, a)
+	sa := openStream(t, connA)
+	// Ask for ~200 KiB replies and never read them.
+	for i := uint64(1); i <= 20; i++ {
+		if err := sa.s.Send(&spikepb.Ping{Seq: i, ReplySize: 200 << 10}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Wait until the server is stuck in a Send (attempted - completed == 1 and
+	// stable), polling rather than sleeping a fixed time.
+	deadline := time.Now().Add(5 * time.Second)
+	stable := 0
+	for stable < 5 {
+		if time.Now().After(deadline) {
+			t.Fatalf("server never blocked in Send (attempted=%d completed=%d)", attempted.Load(), completed.Load())
+		}
+		if attempted.Load()-completed.Load() == 1 && completed.Load() >= 1 {
+			stable++
+		} else {
+			stable = 0
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	h.rev.Revoke(a.serial)
+
+	select {
+	case <-handlerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler stuck in Send was not released by revocation")
+	}
+
+	// The client's connection is closed: reading drains at most what was already
+	// delivered and then fails.
+	failed := make(chan error, 1)
+	go func() {
+		for {
+			if _, err := sa.s.Recv(); err != nil {
+				failed <- err
+				return
+			}
+		}
+	}()
+	select {
+	case err := <-failed:
+		mustCodeIn(t, err, codes.Unavailable, codes.Unauthenticated)
+	case <-time.After(5 * time.Second):
+		t.Fatal("client stream still alive after revocation")
+	}
+	_, err := echo(connA, 1)
+	mustCodeIn(t, err, codes.Unavailable, codes.Unauthenticated)
+
+	// B is unaffected.
+	if p, err := sb.roundTrip(2); err != nil || p.Seq != 2 {
+		t.Fatalf("healthy client broken by revoking another: %v %v", p, err)
+	}
+}
+
+func TestRegisterConnAfterRevokeIsRefused(t *testing.T) {
+	rev := NewRevoker()
+	rev.Revoke("abc")
+	c := &trackedConn{rev: rev, serial: "abc"}
+	if rev.registerConn("abc", c) {
+		t.Fatal("registered a connection for an already revoked serial")
+	}
+	if !rev.registerConn("def", &trackedConn{rev: rev, serial: "def"}) {
+		t.Fatal("refused a connection for a valid serial")
 	}
 }
 

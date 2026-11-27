@@ -26,9 +26,12 @@ message EchoResponse {
 
 message Ping {
   uint64 seq = 1;
+  // Requested size of Pong.payload, to exercise flow control (capped by the server).
+  uint32 reply_size = 2;
 }
 
 message Pong {
   uint64 seq = 1;
   string peer = 2;
+  bytes payload = 3;
 }

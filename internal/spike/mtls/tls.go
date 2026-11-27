@@ -5,7 +5,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
+
+	"google.golang.org/grpc/credentials"
 )
 
 // MaxMessageSize is the proposed 256 KiB gRPC message limit (docs/03-architecture.md).
@@ -18,6 +21,7 @@ type Revoker struct {
 	mu      sync.Mutex
 	revoked map[string]struct{}
 	streams map[string]map[*stream]struct{}
+	conns   map[string]map[*trackedConn]struct{}
 }
 
 type stream struct{ ch chan struct{} }
@@ -27,6 +31,7 @@ func NewRevoker() *Revoker {
 	return &Revoker{
 		revoked: make(map[string]struct{}),
 		streams: make(map[string]map[*stream]struct{}),
+		conns:   make(map[string]map[*trackedConn]struct{}),
 	}
 }
 
@@ -38,16 +43,102 @@ func (r *Revoker) IsRevoked(serial string) bool {
 	return ok
 }
 
-// Revoke marks the serial revoked and signals every open stream authenticated
-// with it. Streams of other serials are untouched.
+// Revoke marks the serial revoked, signals every open stream authenticated with
+// it and closes every transport connection registered for it, which also
+// unblocks handlers stuck in Send or Recv under flow control. Other serials are
+// untouched.
 func (r *Revoker) Revoke(serial string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.revoked[serial] = struct{}{}
 	for s := range r.streams[serial] {
 		close(s.ch)
 		delete(r.streams[serial], s)
 	}
+	var toClose []*trackedConn
+	for c := range r.conns[serial] {
+		toClose = append(toClose, c)
+	}
+	delete(r.conns, serial)
+	r.mu.Unlock()
+	// Closed outside the lock: Close unregisters and takes the lock itself.
+	for _, c := range toClose {
+		_ = c.Close()
+	}
+}
+
+// registerConn tracks c under serial. It reports false, and registers nothing,
+// when the serial is already revoked; check and insert are atomic with Revoke, so
+// a revocation racing with the handshake cannot be missed.
+func (r *Revoker) registerConn(serial string, c *trackedConn) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.revoked[serial]; ok {
+		return false
+	}
+	if r.conns[serial] == nil {
+		r.conns[serial] = make(map[*trackedConn]struct{})
+	}
+	r.conns[serial][c] = struct{}{}
+	return true
+}
+
+func (r *Revoker) unregisterConn(serial string, c *trackedConn) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.conns[serial], c)
+}
+
+// trackedConn is a server-side connection that unregisters itself when closed.
+type trackedConn struct {
+	net.Conn
+	rev    *Revoker
+	serial string
+	once   sync.Once
+}
+
+func (c *trackedConn) Close() error {
+	var err error
+	c.once.Do(func() {
+		c.rev.unregisterConn(c.serial, c)
+		err = c.Conn.Close()
+	})
+	return err
+}
+
+// revocableCreds wraps the server TLS credentials so that every verified
+// connection is registered with the Revoker.
+type revocableCreds struct {
+	credentials.TransportCredentials
+	rev *Revoker
+}
+
+// NewServerCredentials returns gRPC server credentials for the mutual-TLS
+// configuration whose connections are closed when their certificate is revoked.
+func NewServerCredentials(cfg *tls.Config, rev *Revoker) credentials.TransportCredentials {
+	return &revocableCreds{TransportCredentials: credentials.NewTLS(cfg), rev: rev}
+}
+
+func (c *revocableCreds) ServerHandshake(raw net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	conn, info, err := c.TransportCredentials.ServerHandshake(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	ti, ok := info.(credentials.TLSInfo)
+	if !ok || len(ti.State.PeerCertificates) == 0 {
+		_ = conn.Close()
+		return nil, nil, errors.New("mtls: handshake produced no verified client certificate")
+	}
+	serial := serialOf(ti.State.PeerCertificates[0])
+	tc := &trackedConn{Conn: conn, rev: c.rev, serial: serial}
+	if !c.rev.registerConn(serial, tc) {
+		_ = conn.Close()
+		return nil, nil, fmt.Errorf("mtls: client certificate %s is revoked", serial)
+	}
+	return tc, info, nil
+}
+
+func (c *revocableCreds) Clone() credentials.TransportCredentials {
+	return &revocableCreds{TransportCredentials: c.TransportCredentials.Clone(), rev: c.rev}
 }
 
 // Track registers an open stream for the serial. The returned channel is closed

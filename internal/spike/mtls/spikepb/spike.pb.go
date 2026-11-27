@@ -123,8 +123,10 @@ func (x *EchoResponse) GetPeer() string {
 }
 
 type Ping struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Seq   uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
+	// Requested size of Pong.payload, to exercise flow control (capped by the server).
+	ReplySize     uint32 `protobuf:"varint,2,opt,name=reply_size,json=replySize,proto3" json:"reply_size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -166,10 +168,18 @@ func (x *Ping) GetSeq() uint64 {
 	return 0
 }
 
+func (x *Ping) GetReplySize() uint32 {
+	if x != nil {
+		return x.ReplySize
+	}
+	return 0
+}
+
 type Pong struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
 	Peer          string                 `protobuf:"bytes,2,opt,name=peer,proto3" json:"peer,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,6 +228,13 @@ func (x *Pong) GetPeer() string {
 	return ""
 }
 
+func (x *Pong) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
 var File_sakuraops_spike_v1_spike_proto protoreflect.FileDescriptor
 
 const file_sakuraops_spike_v1_spike_proto_rawDesc = "" +
@@ -227,12 +244,15 @@ const file_sakuraops_spike_v1_spike_proto_rawDesc = "" +
 	"\apayload\x18\x01 \x01(\fR\apayload\"E\n" +
 	"\fEchoResponse\x12!\n" +
 	"\fpayload_size\x18\x01 \x01(\x04R\vpayloadSize\x12\x12\n" +
-	"\x04peer\x18\x02 \x01(\tR\x04peer\"\x18\n" +
+	"\x04peer\x18\x02 \x01(\tR\x04peer\"7\n" +
 	"\x04Ping\x12\x10\n" +
-	"\x03seq\x18\x01 \x01(\x04R\x03seq\",\n" +
+	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12\x1d\n" +
+	"\n" +
+	"reply_size\x18\x02 \x01(\rR\treplySize\"F\n" +
 	"\x04Pong\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12\x12\n" +
-	"\x04peer\x18\x02 \x01(\tR\x04peer2\x9c\x01\n" +
+	"\x04peer\x18\x02 \x01(\tR\x04peer\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload2\x9c\x01\n" +
 	"\fSpikeService\x12I\n" +
 	"\x04Echo\x12\x1f.sakuraops.spike.v1.EchoRequest\x1a .sakuraops.spike.v1.EchoResponse\x12A\n" +
 	"\aConnect\x12\x18.sakuraops.spike.v1.Ping\x1a\x18.sakuraops.spike.v1.Pong(\x010\x01BJZHgithub.com/MiyazakiTakara/sakura-ops/internal/spike/mtls/spikepb;spikepbb\x06proto3"
