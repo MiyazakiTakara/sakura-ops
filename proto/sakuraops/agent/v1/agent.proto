@@ -1,0 +1,232 @@
+// SakuraOps agent <-> hub protocol, version 1 (draft).
+//
+// Normative from NEXT-006: docs/13-agent-protocol.md describes the semantics, this file
+// fixes the wire format. Rules for changing it are in docs/dev/contracts.md: field numbers
+// are immutable, removed fields are `reserved`, a semantic change means a new version.
+//
+// Limits stated below (256 KiB frame, bounded lists and strings) are ENFORCED BY THE
+// IMPLEMENTATION (gRPC max message size, explicit validation), not by this schema. A
+// receiver MUST validate every length and count and fail closed on anything unknown.
+//
+// This schema is not a signature format. Signed bytes are canonical JSON carried opaquely
+// in `bytes` fields; protobuf serialization is never signed.
+syntax = "proto3";
+
+package sakuraops.agent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/MiyazakiTakara/sakura-ops/internal/agentproto/agentv1;agentv1";
+
+// AgentHub is served on the dedicated device listener over HTTP/2 with mutual TLS.
+service AgentHub {
+  // Connect is the single long-lived stream. The first frame from the agent MUST be Hello
+  // (within the handshake deadline); the hub answers with ServerHello.
+  rpc Connect(stream AgentMessage) returns (stream HubMessage);
+}
+
+// ProtocolVersion is carried in every envelope. A different major is incompatible.
+message ProtocolVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+}
+
+// AgentMessage is the agent -> hub envelope. A receiver that finds no known body case
+// (oneof unset or a case from a newer minor) MUST fail closed and answer ProtocolError.
+message AgentMessage {
+  ProtocolVersion version = 1;
+  oneof body {
+    Hello hello = 10;
+    Heartbeat heartbeat = 11;
+    CommandAck command_ack = 12;
+    CommandEvent command_event = 13;
+    CommandResult command_result = 14;
+    ProtocolError protocol_error = 15;
+  }
+  reserved 2 to 9, 16 to 29;
+}
+
+// HubMessage is the hub -> agent envelope; same fail-closed rule as AgentMessage.
+message HubMessage {
+  ProtocolVersion version = 1;
+  oneof body {
+    ServerHello server_hello = 10;
+    CommandOffer command_offer = 11;
+    CancelRequest cancel_request = 12;
+    ResultAck result_ack = 13;
+    Drain drain = 14;
+    ProtocolError protocol_error = 15;
+  }
+  reserved 2 to 9, 16 to 29;
+}
+
+// Hello is the first agent frame. Identity is proven by the client certificate; agent_id
+// here is only checked against it, never trusted on its own.
+message Hello {
+  string agent_id = 1;
+  string agent_version = 2;
+  string build_digest = 3;
+  string boot_id = 4;
+  // Fresh random value per connection; the hub rejects reuse.
+  bytes connection_nonce = 5;
+  // Supported capabilities, e.g. "action/<id>@<version>". Bounded by the implementation.
+  repeated string capabilities = 6;
+  // Bounded resume summary: commands that the agent still holds (journal or spool).
+  repeated ResumeEntry resume = 7;
+  reserved 8 to 19;
+}
+
+message ResumeEntry {
+  string command_id = 1;
+  // Highest event_seq the agent has produced for the command.
+  uint64 last_event_seq = 2;
+  // True when a final CommandResult is spooled and not yet acknowledged.
+  bool result_pending = 3;
+  reserved 4 to 9;
+}
+
+message ServerHello {
+  Status status = 1;
+  // Readable reason when status is not STATUS_OK (for example an incompatible version).
+  string reason = 2;
+  // Negotiated version (the envelope version is the negotiated one after this frame).
+  ProtocolVersion negotiated = 3;
+  // Fencing token: monotonically increasing per agent. Offers from an older epoch are void.
+  uint64 connection_epoch = 4;
+  uint32 heartbeat_interval_seconds = 5;
+  // Maximum frame size in bytes (docs/13: 256 KiB). Enforced by the implementation.
+  uint32 max_frame_bytes = 6;
+  google.protobuf.Timestamp server_time = 7;
+  reserved 8 to 19;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_OK = 1;
+    STATUS_INCOMPATIBLE_VERSION = 2;
+    STATUS_REJECTED = 3;
+  }
+}
+
+message Heartbeat {
+  uint64 epoch = 1;
+  uint64 seq = 2;
+  string boot_id = 3;
+  // Bounded by the implementation (docs/13); an over-long list is a protocol error.
+  repeated string active_command_ids = 4;
+  google.protobuf.Timestamp sent_at = 5;
+  reserved 6 to 15;
+}
+
+// CommandOffer delivers one signed command. `envelope` is the canonical JSON that was
+// signed (docs/13 "Podpisane zlecenie"); the agent verifies the signature over exactly
+// these bytes and re-validates every field. It is never re-serialized.
+message CommandOffer {
+  bytes envelope = 1;
+  bytes signature = 2;
+  string key_id = 3;
+  uint64 epoch = 4;
+  reserved 5 to 15;
+}
+
+message CommandAck {
+  string command_id = 1;
+  Disposition disposition = 2;
+  // Stable machine code for a rejection (no secrets, no free text from the host).
+  string code = 3;
+  reserved 4 to 15;
+
+  enum Disposition {
+    DISPOSITION_UNSPECIFIED = 0;
+    DISPOSITION_ACCEPTED = 1;
+    DISPOSITION_REJECTED = 2;
+    DISPOSITION_DUPLICATE = 3;
+  }
+}
+
+message CommandEvent {
+  string command_id = 1;
+  // Monotonic per command; the hub deduplicates on (command_id, event_seq).
+  uint64 event_seq = 2;
+  string kind = 3;
+  // Bounded typed metadata as canonical JSON, described by metadata_schema.
+  bytes metadata = 4;
+  string metadata_schema = 5;
+  google.protobuf.Timestamp observed_at = 6;
+  reserved 7 to 15;
+}
+
+message CommandResult {
+  string command_id = 1;
+  uint64 event_seq = 2;
+  Outcome outcome = 3;
+  // Typed result as canonical JSON bytes, described by result_schema. There is
+  // deliberately no map<string,string>: typed result schemas arrive with NEXT-016/NEXT-022
+  // and until then this payload is opaque to the protocol.
+  bytes result = 4;
+  string result_schema = 5;
+  // Whether the command changed the host. UNKNOWN covers a crash during a mutation and
+  // blocks further changes until reconciliation (docs/13).
+  Effect effect = 6;
+  google.protobuf.Timestamp observed_at = 7;
+  reserved 8 to 19;
+
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_SUCCEEDED = 1;
+    OUTCOME_FAILED = 2;
+    OUTCOME_EXPIRED = 3;
+    OUTCOME_CANCELED = 4;
+    OUTCOME_TIMED_OUT = 5;
+    OUTCOME_UNKNOWN = 6;
+  }
+
+  enum Effect {
+    EFFECT_UNSPECIFIED = 0;
+    EFFECT_NONE = 1;
+    EFFECT_CHANGED = 2;
+    EFFECT_UNKNOWN = 3;
+  }
+}
+
+// CancelRequest is signed separately from the offer; `envelope` is canonical JSON with the
+// scope command_id, TTL, nonce and reason code. Best effort, never starts a new action.
+message CancelRequest {
+  bytes envelope = 1;
+  bytes signature = 2;
+  string key_id = 3;
+  reserved 4 to 15;
+}
+
+// ResultAck is sent only after the hub has durably stored the result.
+message ResultAck {
+  string command_id = 1;
+  uint64 highest_committed_seq = 2;
+  reserved 3 to 9;
+}
+
+// Drain: no new offers; finish in-flight work according to local policy.
+message Drain {
+  string reason_code = 1;
+  reserved 2 to 9;
+}
+
+// ProtocolError is sent in either direction, without secrets. `correlation_id` identifies
+// the frame or command that caused it, when known.
+message ProtocolError {
+  Code code = 1;
+  string correlation_id = 2;
+  reserved 3 to 9;
+
+  enum Code {
+    CODE_UNSPECIFIED = 0;
+    CODE_UNKNOWN_MESSAGE = 1;
+    CODE_INCOMPATIBLE_VERSION = 2;
+    CODE_FRAME_TOO_LARGE = 3;
+    CODE_INVALID_FIELD = 4;
+    CODE_UNAUTHENTICATED = 5;
+    CODE_STALE_EPOCH = 6;
+    CODE_HANDSHAKE_TIMEOUT = 7;
+    CODE_RATE_LIMITED = 8;
+    CODE_INTERNAL = 9;
+  }
+}
