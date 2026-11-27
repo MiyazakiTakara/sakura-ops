@@ -53,8 +53,11 @@ The owner should mark these exact job names as required on `v2/native-agent-blue
   `go.yaml.in/yaml/v4` rc.3 while oasdiff, kin-openapi and oapi-codegen (in `tools/go.mod`) need the
   final v4.0.0 whose API differs. Merging them into one module does not build. It runs without
   shellcheck locally; GitHub runners ship shellcheck, so `run:` scripts are linted there.
-- `openapi-breaking` and `proto-breaking` skip only when the verified base commit does not yet contain
-  the contract; they print the base SHA when they do. The skip disappears once the contract is on the base.
+- `openapi-breaking` and `proto-breaking` fail closed (`CONTRACT_BASE_REQUIRED=1`, default): an
+  unresolvable base or a base without the contract is an error, there is no bootstrap skip in CI. The
+  contracts workflow checks out with `fetch-depth: 0`, verifies `origin/v2/native-agent-blueprint`
+  resolves, logs the base SHA, and both comparisons log `... against <ref> (<sha>)` when they run.
+  `make contracts-real-history-test` proves it on a local clone at the real base commit.
 
 ## Not covered yet
 

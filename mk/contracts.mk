@@ -6,10 +6,13 @@ OPENAPI_TS    := frontend/src/lib/api/schema.d.ts
 AGENT_PROTO   := proto
 AGENT_GO      := internal/agentproto/agentv1
 PROTO_BASE    ?= origin/v2/native-agent-blueprint
+# 1 (default): a base without the contract is an error. 0 only to bootstrap a brand new contract locally.
+CONTRACT_BASE_REQUIRED ?= 1
+export CONTRACT_BASE_REQUIRED
 CONTRACT_PATHS := $(OPENAPI_GO) $(OPENAPI_TS) $(AGENT_GO)
 
 .PHONY: contracts openapi-go openapi-ts agent-proto proto-lint proto-breaking \
-	proto-breaking-test openapi-breaking openapi-breaking-test \
+	proto-breaking-test openapi-breaking openapi-breaking-test contracts-real-history-test \
 	workflow-lint workflow-policy contracts-check contracts-test
 
 ## openapi-go: regenerate the Go types from the OpenAPI document.
@@ -28,7 +31,7 @@ agent-proto:
 contracts: openapi-go openapi-ts agent-proto
 
 ## proto-breaking: buf breaking (FILE) against PROTO_BASE. Fails closed when the ref does not
-## resolve or git errors; skips only when the verified base commit has no proto/ module.
+## resolve, git errors, or the base lacks proto/ (CONTRACT_BASE_REQUIRED=1, default).
 proto-breaking:
 	@BUF='$(TOOL) buf' sh scripts/proto-breaking.sh "$(PROTO_BASE)" "$(CURDIR)"
 
@@ -43,6 +46,10 @@ openapi-breaking:
 ## openapi-breaking-test: tests for scripts/openapi-breaking.sh in temporary git repos.
 openapi-breaking-test:
 	@OASDIFF='$(TOOL) oasdiff' sh scripts/openapi-breaking_test.sh
+
+## contracts-real-history-test: breaking checks against a local clone at the real base commit.
+contracts-real-history-test:
+	@BUF='$(TOOL) buf' OASDIFF='$(TOOL) oasdiff' sh scripts/contracts-real-history_test.sh
 
 ## workflow-lint: actionlint (own tool module, see docs/dev/ci.md) plus the workflow policy test.
 workflow-lint: workflow-policy
