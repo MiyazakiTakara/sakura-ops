@@ -1,5 +1,7 @@
 # 01. Audyt punktu wyjścia i decyzja o nowym kierunku
 
+Formalny zapis decyzji ADR-000/ADR-001 (status Proposed): [ADR-0001](adr/0001-agent-hub-linux-browser-only.md).
+
 ## Zakres
 
 Stan odczytany przez GitHub 27.11.2026: [main @ fdb928e](https://github.com/MiyazakiTakara/sakura-ops/tree/fdb928eb880eb74c8296176ee57d0f63bf6fd5fd), ostatni commit 20.11.2026, scalony [PR #21](https://github.com/MiyazakiTakara/sakura-ops/pull/21). [PR #22](https://github.com/MiyazakiTakara/sakura-ops/pull/22) pozostaje otwarty (head a9ae0474aa5c5a3b755b60753ae7ca0a5e763330). Sprawdzono drzewo, historię PR, README, roadmapę, dokumentację UI, preflightu i wykonawcy, modele, endpointy, strukturę dashboardu, CLI, interfejsy modułów i workflow CI. To przegląd architektury i wybranych fragmentów kodu, nie pełny audyt bezpieczeństwa wszystkich linii. Nie wykonano testów ani połączeń do zarządzanych hostów.
