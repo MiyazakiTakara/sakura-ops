@@ -1,0 +1,15 @@
+version: "2"
+sql:
+  - engine: postgresql
+    # prelude.sql stands in for what bootstrap and goose create (sqlc never applies it).
+    schema:
+      - db/sqlc/prelude.sql
+      - db/migrations
+    queries: db/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/store/dbgen
+        sql_package: pgx/v5
+        emit_json_tags: false
+        emit_empty_slices: true
