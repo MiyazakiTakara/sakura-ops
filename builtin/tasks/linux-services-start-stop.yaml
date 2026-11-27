@@ -1,0 +1,26 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "linux-services-start-stop"
+  version: 1
+  name: "Uruchom lub zatrzymaj usługę"
+inputs:
+  service_id:
+    type: "string"
+    label: "Usługa"
+  operation:
+    type: "string"
+    label: "Operacja"
+    enum:
+      - "start"
+      - "stop"
+steps:
+  -
+    id: "main"
+    action: "linux.services.start_stop"
+    version: 1
+    with:
+      service_id:
+        input: "service_id"
+      operation:
+        input: "operation"

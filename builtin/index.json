@@ -1,0 +1,131 @@
+{
+  "status": "design_only",
+  "tasks": [
+    {
+      "id": "agent-ping",
+      "path": "tasks/agent-ping.yaml",
+      "risk": "D0",
+      "planned_stage": 3,
+      "status": "planned"
+    },
+    {
+      "id": "linux-facts",
+      "path": "tasks/linux-facts.yaml",
+      "risk": "D0",
+      "planned_stage": 3,
+      "status": "planned"
+    },
+    {
+      "id": "linux-resources",
+      "path": "tasks/linux-resources.yaml",
+      "risk": "D0",
+      "planned_stage": 4,
+      "status": "planned"
+    },
+    {
+      "id": "linux-services-status",
+      "path": "tasks/linux-services-status.yaml",
+      "risk": "D0",
+      "planned_stage": 4,
+      "status": "planned"
+    },
+    {
+      "id": "linux-updates-audit",
+      "path": "tasks/linux-updates-audit.yaml",
+      "risk": "D0",
+      "planned_stage": 4,
+      "status": "planned"
+    },
+    {
+      "id": "linux-packages-info",
+      "path": "tasks/linux-packages-info.yaml",
+      "risk": "D0",
+      "planned_stage": 4,
+      "status": "planned"
+    },
+    {
+      "id": "linux-reboot-status",
+      "path": "tasks/linux-reboot-status.yaml",
+      "risk": "D0/D1",
+      "planned_stage": 4,
+      "status": "planned"
+    },
+    {
+      "id": "linux-certificates-audit",
+      "path": "tasks/linux-certificates-audit.yaml",
+      "risk": "D0",
+      "planned_stage": 4,
+      "status": "planned"
+    },
+    {
+      "id": "linux-updates-refresh",
+      "path": "tasks/linux-updates-refresh.yaml",
+      "risk": "D1",
+      "planned_stage": 7,
+      "status": "planned"
+    },
+    {
+      "id": "linux-updates-security",
+      "path": "tasks/linux-updates-security.yaml",
+      "risk": "Z2",
+      "planned_stage": 7,
+      "status": "planned"
+    },
+    {
+      "id": "linux-updates-selected",
+      "path": "tasks/linux-updates-selected.yaml",
+      "risk": "Z2",
+      "planned_stage": 7,
+      "status": "planned"
+    },
+    {
+      "id": "linux-services-reload",
+      "path": "tasks/linux-services-reload.yaml",
+      "risk": "Z1/Z2",
+      "planned_stage": 7,
+      "status": "planned"
+    },
+    {
+      "id": "linux-services-restart",
+      "path": "tasks/linux-services-restart.yaml",
+      "risk": "Z2",
+      "planned_stage": 7,
+      "status": "planned"
+    },
+    {
+      "id": "linux-services-start-stop",
+      "path": "tasks/linux-services-start-stop.yaml",
+      "risk": "Z2",
+      "planned_stage": 7,
+      "status": "planned"
+    },
+    {
+      "id": "linux-reboot",
+      "path": "tasks/linux-reboot.yaml",
+      "risk": "Z2",
+      "planned_stage": 8,
+      "status": "planned"
+    },
+    {
+      "id": "linux-config-deploy",
+      "path": "tasks/linux-config-deploy.yaml",
+      "risk": "Z2",
+      "planned_stage": 8,
+      "status": "planned"
+    },
+    {
+      "id": "agent-version",
+      "path": "tasks/agent-version.yaml",
+      "risk": "D0",
+      "planned_stage": 3,
+      "status": "planned"
+    },
+    {
+      "id": "agent-upgrade",
+      "path": "tasks/agent-upgrade.yaml",
+      "risk": "Z2",
+      "planned_stage": 8,
+      "status": "planned"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "agent-upgrade"
+  version: 1
+  name: "Zaktualizuj agenta"
+inputs:
+  release_id:
+    type: "string"
+    label: "Podpisane wydanie"
+steps:
+  -
+    id: "main"
+    action: "agent.upgrade"
+    version: 1
+    with:
+      release_id:
+        input: "release_id"

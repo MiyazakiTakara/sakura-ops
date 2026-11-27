@@ -33,6 +33,9 @@ Go (hub, agent, worker, gateway, signer, opcjonalny CLI), Svelte 5 + TypeScript 
 | [08. Roadmapa i backlog](docs/08-roadmap.md) | Etapy, zadania, testy, bramki wydania |
 | [09. Terminal i zgodność z poprzednią iteracją](docs/09-terminal.md) | skr, tryby, polecenia, edytor, Git, migracja i testy |
 | [10. Stack i ADR](docs/10-stack.md) | Go, Svelte, kontrakty, wdrożenie i bramka technologiczna |
+| [14. Sakura Task v1](docs/14-workflow-engine.md) | Jednolity YAML/JSON, adaptery i wbudowane zadania |
+| [Schema v1](schemas/sakura-task-v1.schema.json) | Projekt walidacji struktury |
+| [Wbudowane zadania](builtin/tasks/) | Deklaracje projektowe wszystkich 18 pozycji katalogu |
 | [Przykładowy katalog](examples/task-catalog.yaml) | Makiety danych do projektowania, niewykonywalne |
 | [Przykładowa konfiguracja](examples/config.example.yaml) | Proponowane ustawienia bez sekretów |
 
@@ -41,3 +44,5 @@ Go (hub, agent, worker, gateway, signer, opcjonalny CLI), Svelte 5 + TypeScript 
 GUI zapewnia prostą obsługę, a terminal skr jest od początku równorzędnym interfejsem tych samych usług. Szczegóły techniczne są dostępne na żądanie. Nie powstaje aplikacja desktopowa, klient natywny, agent dla Windows ani obsługa innych systemów niż Linux w tej roadmapie. Zwykła przeglądarka na dowolnym systemie może korzystać z panelu. Osobny CLI skr pozostaje opcjonalny dla Linuksa, bez GUI. Agent nie jest uniwersalną powłoką na polecenie API, wykonuje ograniczone, typowane operacje. Automatyzacja i dostęp interaktywny mają osobne granice zaufania i uprawnienia. Domyślne wdrożenie jest odczytowe; zmiany, restart i zdalne sesje to odrębne możliwości wymagające autoryzacji. Agent jest jawnie instalowaną, widoczną usługą systemową z dokumentacją i możliwością usunięcia. Brak ukrytego dostępu, zbierania danych użytkowników, obchodzenia uwierzytelnienia i automatycznego otwierania portów.
 
 Gałąź zawiera wyłącznie dokumentację i przykładowe dane, bez starego kodu. Commit zachowuje rodzica main dla identyfikowalności źródła audytu; nie jest orphan branch w sensie historii Git. Nie scalać mechanicznie z main, ponieważ usunęłoby to stare pliki. Decyzję o przejściu na Next podjąć po odbiorze. Repozytorium jest publiczne: nie publikować realnych adresów infrastruktury, danych klientów, kluczy, tokenów ani produkcyjnych konfiguracji.
+
+Wszystkie zadania, zarówno wbudowane, jak i własne, używają tego samego formatu Sakura Task v1 i silnika. YAML i JSON są równoważne; zadania są przenośne między wspieranymi dystrybucjami Linux dzięki adapterom Go. Wbudowane definicje w builtin/tasks są na razie kontraktami projektowymi, nie aktywnymi zadaniami.

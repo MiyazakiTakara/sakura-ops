@@ -1,0 +1,18 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "linux-services-reload"
+  version: 1
+  name: "Przeładuj konfigurację usługi"
+inputs:
+  service_id:
+    type: "string"
+    label: "Usługa"
+steps:
+  -
+    id: "main"
+    action: "linux.services.reload"
+    version: 1
+    with:
+      service_id:
+        input: "service_id"

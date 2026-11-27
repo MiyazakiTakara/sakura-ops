@@ -94,3 +94,7 @@ Model: nadużycie operatora, kradzież invite/token/klucza, klon agenta, fałszy
 ## Zgodność z poprzednim terminalem i Git
 
 Parser skr i GUI wywołują identyczne usługi aplikacyjne, a kontekst trybu nie jest uprawnieniem. Osobne schematy requestów i transport dla skr, operacji edytora i sesji SSH. Terminal nie przyjmuje dowolnego polecenia OS. Zachować interfejsy repozytoriów Git jako opcjonalny moduł importu i wersjonowania definicji typowanych zadań, nigdy kodu wykonywalnego agenta; osobne uprawnienia, potwierdzony diff, pin SHA, walidacja symlink/path i jawny push. Żaden commit/push nie uruchamia zadań. Szczegóły w 09-terminal.md.
+
+## Sakura Task v1
+
+Jeden format YAML/JSON dla zadań wbudowanych i własnych; normalizacja i walidacja w Go, immutable TaskVersion. Rejestr ActionContract dostarczany z release określa typy, efekty i ryzyko niezależnie od deklaracji. Worker orkiestruje kroki per host, agent otrzymuje tylko podpisane typowane zlecenie pojedynczej akcji i niezależnie egzekwuje lokalną politykę. Adapter jest wybierany z zaufanego rejestru dla dystrybucji/capabilities; brak dowolnego shell lub adapter override. Zobacz 14-workflow-engine.md.

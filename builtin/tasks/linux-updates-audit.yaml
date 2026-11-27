@@ -1,0 +1,22 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "linux-updates-audit"
+  version: 1
+  name: "Sprawdź dostępne aktualizacje"
+inputs:
+  scope:
+    type: "string"
+    label: "Zakres"
+    default: "all"
+    enum:
+      - "all"
+      - "security"
+steps:
+  -
+    id: "main"
+    action: "linux.updates.audit"
+    version: 1
+    with:
+      scope:
+        input: "scope"

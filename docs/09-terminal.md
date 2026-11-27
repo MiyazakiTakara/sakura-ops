@@ -79,3 +79,7 @@ Dopiero po powyższych testach uznajemy odpowiednią funkcję za dostarczoną. N
 ## Implementacja w nowym stacku (ADR-002)
 
 Parser i rejestr poleceń w Go, współdzielone DTO i usługi z REST API; CLI Cobra tylko jako klient API, nie duplikacja polityki. Svelte store dla geometrii i stanu okna; xterm.js dla terminala, CodeMirror 6 dla edytora. Nie uruchamiać Node na produkcji. Testy regresji starych zachowań przez Vitest/Playwright i Go, bez kopiowania starego parsera Python w runtime. Kontrolowany skr przez REST i SSE, prawdziwy SSH przez oddzielny WSS gateway. Zachowanie i uprawnienia nie zmieniają się przy wymianie stacku.
+
+## Jednolity format zadań
+
+CodeMirror edytuje Sakura Task v1 (YAML/JSON). Docelowo task validate FILE, task import FILE, show task ID, task plan ID --host ALIAS. Publikacja wymaga uprawnienia; import nie uruchamia zadania. GUI i skr operują na tych samych wersjach i inputach, wbudowane można skopiować jako nowy draft z nowym ID. Nie modyfikować oryginału release. Szczegóły 14-workflow-engine.md.

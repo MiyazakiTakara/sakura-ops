@@ -1,62 +1,6 @@
-# Dane przykładowe, nie wykonywalne definicje.
+# Indeks przykładowych definicji, nie format wykonawczy.
 schema_version: 1
 tasks:
-  - id: agent.ping
-    version: 1
-    title: Sprawdź połączenie
-    action: agent.ping
-    action_version: 1
-    risk: D0
-    effects: [challenge_response]
-    capabilities: [agent.ping]
-    required_role: operator
-    timeout_seconds: 30
-    schedule_allowed: true
-    params_schema:
-      type: object
-      additionalProperties: false
-    output_fields: [status, latency_ms, agent_version, observed_at]
-  - id: linux.updates.audit
-    version: 1
-    title: Sprawdź dostępne aktualizacje
-    action: linux.updates.audit
-    action_version: 1
-    risk: D0
-    effects: [read_existing_package_metadata]
-    capabilities: [linux, supported_package_cache]
-    required_role: operator
-    timeout_seconds: 300
-    schedule_allowed: true
-    params_schema:
-      type: object
-      additionalProperties: false
-      properties:
-        scope:
-          type: string
-          enum: [all, security]
-          default: all
-    output_fields: [available_count, security_count, cache_status, observed_at]
-  - id: linux.services.restart
-    version: 1
-    title: Uruchom ponownie usługę
-    action: linux.services.restart
-    action_version: 1
-    enabled_by_default: false
-    risk: Z2
-    effects: [service_restart, possible_downtime]
-    capabilities: [linux, approved_service_helper]
-    required_role: operator
-    approval: second_person
-    maintenance_window_required: true
-    max_parallel: 1
-    timeout_seconds: 120
-    schedule_allowed: false
-    params_schema:
-      type: object
-      additionalProperties: false
-      required: [service_id]
-      properties:
-        service_id:
-          type: string
-          enum: [example-web-service]
-    output_fields: [before, after, health_status, changed, observed_at]
+  - file: tasks/system-health.yaml
+  - file: tasks/package-audit.yaml
+  - file: tasks/conditional-audit.yaml

@@ -1,0 +1,26 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "package-audit"
+  version: 1
+  name: "Audyt wersji pakietów"
+inputs:
+  packages:
+    type: "string_list"
+    label: "Pakiety"
+    default:
+      - "nginx"
+steps:
+  -
+    id: "installed"
+    action: "linux.packages.info"
+    version: 1
+    with:
+      packages:
+        input: "packages"
+  -
+    id: "updates"
+    action: "linux.updates.audit"
+    version: 1
+    with:
+      scope: "all"

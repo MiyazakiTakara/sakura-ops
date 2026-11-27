@@ -1,0 +1,11 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "linux-reboot-status"
+  version: 1
+  name: "Sprawdź potrzebę restartu"
+steps:
+  -
+    id: "main"
+    action: "linux.reboot.status"
+    version: 1

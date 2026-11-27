@@ -1,0 +1,21 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "system-health"
+  version: 1
+  name: "Sprawdź stan serwera"
+steps:
+  -
+    id: "system"
+    action: "linux.facts"
+    version: 1
+  -
+    id: "resources"
+    action: "linux.resources"
+    version: 1
+  -
+    id: "updates"
+    action: "linux.updates.audit"
+    version: 1
+    with:
+      scope: "security"

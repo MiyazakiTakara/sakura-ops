@@ -1,0 +1,11 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "agent-ping"
+  version: 1
+  name: "Sprawdź połączenie"
+steps:
+  -
+    id: "main"
+    action: "agent.ping"
+    version: 1

@@ -45,7 +45,7 @@ Klasy D0 = diagnostyka nie-root; D1 = dodatkowy odczyt uprzywilejowany lub jawna
 
 ## Schemat i przykłady
 
-TaskVersion: id, version, title, description, platform/capabilities, risk, effects, params JSON Schema (additionalProperties=false, length, enum), typed output schema, required_role, action_id/version, timeout, max_parallel, retry policy, schedule_allowed, postchecks, digest, docs. Wersja zamrożona w planie i harmonogramie; zmiana wymaga ponownej akceptacji. Przykłady w examples/task-catalog.yaml to projektowe dane, nie wykonywalne joby.
+TaskVersion przechowuje znormalizowaną definicję Sakura Task v1, wersję, digest oraz wyliczone ryzyko, efekty, wymagane capabilities i politykę. Akcje i ich parametry/output mają osobny zaufany rejestr kontraktów dostarczany z release agenta. Schemat i semantyka: [14-workflow-engine.md](14-workflow-engine.md). Wersja zamrożona w planie i harmonogramie; zmiana wymaga ponownej akceptacji. Wszystkie 18 powyższych pozycji ma deklarację w builtin/tasks w tym samym formacie co zadania własne. examples/task-catalog.yaml jest wyłącznie przykładowym indeksem, nie drugim formatem wykonawczym. Definicje nie są jeszcze wykonywalne; aktywacja wymaga implementacji i odbioru akcji.
 
 1. Poranny audyt: grupa lab-linux, zadanie Sprawdź dostępne aktualizacje, 07:00, powiadomienie przy failed lub stale. Bez instalacji.
 2. Nowy host lab-web-01: onboarding, ping, fakty, dysk, dodanie do grupy web-test; tylko D0.

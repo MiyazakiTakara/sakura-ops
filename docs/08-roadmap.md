@@ -22,7 +22,7 @@ Odbiór: viewer nie mutuje, inna grupa nie widzi hosta, brak dowolnego shell i b
 
 ## 2. Rejestr, protokół i kolejka lokalna (NEXT-013..021)
 - 013 Host/Group/AgentIdentity, wersjonowanie, scope, retirement; lista i karta.
-- 014 TaskVersion, schema params/output; fixed localhost/simulator action, wizard.
+- 014 Sakura Task v1: wspólny parser YAML/JSON, schema, walidacja semantyczna, ActionContract registry, immutable TaskVersion/digest, fixed localhost/simulator action, wizard; 14-workflow-engine.md.
 - 015 Immutable Plan, RBAC, expiry, podpis i nonce, stale checks.
 - 016 Agent core Go: protokół, strict parser, lokalny journal, typed action registry, nie-root.
 - 017 Gateway i issuer lab, mTLS, heartbeat, reconnect, revocation, rozjazd wersji.
@@ -99,7 +99,7 @@ Odbiór: operator nie może uruchomić dowolnego roota; test konkretnej granicy 
 Odbiór: formalny sign-off, restore, sieć, audyt, revocation, rollback procedure. Bez automatycznego scalenia z dotychczasowym main.
 
 ## 9. Rozszerzenia (NEXT-070..077)
-- 070 Kompozycja zadań z dozwolonych kroków i typed params, bounded DAG, review.
+- 070 Kreator wielokrokowych zadań Sakura Task v1: typed inputs, warunki i output references, import/eksport, review. MVP używa tego samego formatu (pojedyncze kroki, następnie sekwencje D0). DAG, pętle i dowolny shell poza v1.
 - 071 Rozszerzenie macierzy dystrybucji Linux, pakietów i architektur po testach, bez innych OS.
 - 072 Opcjonalny SFTP w przeglądarce przez dozwolony SSH, osobny scope i security review, bez automatyzacji powłoki.
 - 073 Usprawnienia terminala skr i edytora: tabs/workspace, kontekstowy help, ergonomia i regresje.
@@ -140,3 +140,7 @@ Definition of Done: code review, CI PASS rzeczywiście zweryfikowane, kryteria a
 ## Bramka zachowania poprzedniej iteracji
 
 NEXT-006/011/012: pływające okno, działające tryby i parser, focus/resize, help, historia, kontekstowy Tab oraz tylko dostępne funkcje. NEXT-014/035: GUI i skr wywołują te same plany i runy. NEXT-049/075: opcjonalna praca z Git (repo, sync, edycja, diff, commit, jawny push), po review; bez wymogu Git dla podstawowego użytkownika. Szczegółowa macierz i testy w 09-terminal.md. Żaden etap nie obejmuje aplikacji desktopowej ani innych zarządzanych OS.
+
+## Bramka jednolitych zadań
+
+NEXT-014/016: ten sam Task v1 dla builtin i custom, test równoważności YAML/JSON, odmowa złych definicji, schema i trusted action registry. NEXT-030..036: sekwencje D0 i adaptery APT/DNF, ten sam kontrakt wyników, nieobsługiwane akcje blokowane. NEXT-052..059 i 063..065: oddzielny odbiór zmian i helpera. Każdy z 18 manifestów builtin/tasks jest objęty testem schema, kontraktu, polityki i macierzy wspieranych OS. Nie aktywować zadania bez działającego i odebranego adaptera. Brak specjalnego runnera dla zadań wbudowanych.

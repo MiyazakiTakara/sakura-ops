@@ -1,0 +1,24 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "conditional-audit"
+  version: 1
+  name: "Diagnostyka po wykryciu aktualizacji"
+steps:
+  -
+    id: "updates"
+    action: "linux.updates.audit"
+    version: 1
+    with:
+      scope: "all"
+  -
+    id: "resources"
+    action: "linux.resources"
+    version: 1
+    when:
+      left:
+        output:
+          step: "updates"
+          field: "available_count"
+      op: "gt"
+      right: 0

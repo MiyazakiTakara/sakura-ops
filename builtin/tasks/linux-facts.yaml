@@ -1,0 +1,11 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "linux-facts"
+  version: 1
+  name: "Informacje o systemie"
+steps:
+  -
+    id: "main"
+    action: "linux.facts"
+    version: 1

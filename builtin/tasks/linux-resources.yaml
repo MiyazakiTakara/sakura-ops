@@ -1,0 +1,11 @@
+apiVersion: "sakuraops/v1"
+kind: "Task"
+metadata:
+  id: "linux-resources"
+  version: 1
+  name: "Sprawdź zasoby"
+steps:
+  -
+    id: "main"
+    action: "linux.resources"
+    version: 1
