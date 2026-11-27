@@ -21,6 +21,8 @@ Go (hub, agent, worker, gateway, signer, opcjonalny CLI), Svelte 5 + TypeScript 
 
 ## Dokumentacja
 
+**Obowiązkowe dla wykonawców:** [AGENTS.md](AGENTS.md) i [DESIGN.md](DESIGN.md). Zakres MVP w [11-mvp.md](docs/11-mvp.md).
+
 | Dokument | Zakres |
 | --- | --- |
 | [01. Audyt](docs/01-audit.md) | Stan aktualnego main i PR #22, decyzje co zachować |
@@ -34,6 +36,20 @@ Go (hub, agent, worker, gateway, signer, opcjonalny CLI), Svelte 5 + TypeScript 
 | [09. Terminal i zgodność z poprzednią iteracją](docs/09-terminal.md) | skr, tryby, polecenia, edytor, Git, migracja i testy |
 | [10. Stack i ADR](docs/10-stack.md) | Go, Svelte, kontrakty, wdrożenie i bramka technologiczna |
 | [14. Sakura Task v1](docs/14-workflow-engine.md) | Jednolity YAML/JSON, adaptery i wbudowane zadania |
+| [11. MVP](docs/11-mvp.md) | Zakres i odbiór pierwszej wersji |
+| [12. Ekrany UI](docs/12-design-system.md) | Routing, makiety opisowe i stany |
+| [13. Protokół agenta](docs/13-agent-protocol.md) | gRPC, tożsamość, podpisy, recovery |
+| [15. Uprawnienia](docs/15-permissions.md) | RBAC, scope i zgody |
+| [16. Linux](docs/16-linux-compatibility.md) | Macierz OS i adaptery |
+| [17. Testy](docs/17-testing.md) | CI, lab i odbiór |
+| [18. Rozwój](docs/18-development-rules.md) | PR, role agentów, DoD |
+| [19. Release](docs/19-release-plan.md) | Wersjonowanie i wdrożenia |
+| [20. Threat model](docs/20-threat-model.md) | Granice i zagrożenia |
+| [21. Profile](docs/21-profiles.md) | Grupy, profile i effective policy |
+| [22. Model danych](docs/22-data-model.md) | Tabele, indeksy i transakcje |
+| [23. API](docs/23-api-contract.md) | REST/SSE, skr i endpointy |
+| [24. Aktualizacje](docs/24-updates.md) | Audyt, zmiany, okna |
+| [25. Backlog](docs/25-backlog.md) | Pakiety PR i zależności |
 | [Schema v1](schemas/sakura-task-v1.schema.json) | Projekt walidacji struktury |
 | [Wbudowane zadania](builtin/tasks/) | Deklaracje projektowe wszystkich 18 pozycji katalogu |
 | [Przykładowy katalog](examples/task-catalog.yaml) | Makiety danych do projektowania, niewykonywalne |
@@ -46,3 +62,5 @@ GUI zapewnia prostą obsługę, a terminal skr jest od początku równorzędnym 
 Gałąź zawiera wyłącznie dokumentację i przykładowe dane, bez starego kodu. Commit zachowuje rodzica main dla identyfikowalności źródła audytu; nie jest orphan branch w sensie historii Git. Nie scalać mechanicznie z main, ponieważ usunęłoby to stare pliki. Decyzję o przejściu na Next podjąć po odbiorze. Repozytorium jest publiczne: nie publikować realnych adresów infrastruktury, danych klientów, kluczy, tokenów ani produkcyjnych konfiguracji.
 
 Wszystkie zadania, zarówno wbudowane, jak i własne, używają tego samego formatu Sakura Task v1 i silnika. YAML i JSON są równoważne; zadania są przenośne między wspieranymi dystrybucjami Linux dzięki adapterom Go. Wbudowane definicje w builtin/tasks są na razie kontraktami projektowymi, nie aktywnymi zadaniami.
+
+Plan obejmuje projekt UI, model danych, role, protokół, profile, aktualizacje, testy i wydania. Nie jest dowodem wykonania. Przed pierwszym kodem: review P01, spike i akceptacja kontraktów. Wszystkie niezweryfikowane szczegóły są projektowymi domyślnymi wartościami. Legacy main pozostaje niezależny.

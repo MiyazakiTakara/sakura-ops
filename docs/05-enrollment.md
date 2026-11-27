@@ -48,3 +48,7 @@ Odłączenie: admin suspend/retire, unieważnia certyfikaty i grants, zamyka po�
 ShellCheck i Bats dla parsera, --check, kodów, uprawnień, konfliktów, symlink, ponownego wykonania, TLS/CA, złego podpisu/digest, błędnej arch, przerwania i cleanup. Test token nie pojawia się w ps/log/history/URL. Integracja API: expiry, replay, równoczesny claim, zły CSR, revoke podczas approve, lost response, oversized JSON, redirect, zły fingerprint, cert serial revoked, poświadczenie innego hosta, klon VM. VM lab Ubuntu/Debian i Oracle Linux/RHEL-family: SELinux enforcing, brak nowego portu, outbound TLS, nie-root, brak sudo/helpera, reboot hosta, reconnect, downgrade rejection, uninstall/rotation.
 
 Odbiór UX: świeża wspierana VM, jedno zaproszenie i uruchomienie skryptu plus niezależne potwierdzenie fingerprint, host online i zadanie D0 bez ręcznego YAML. Proponowany cel <=5 minut po spełnieniu wymagań sieci i pobraniu release, nie zmierzony czas. Implementacja skryptu wymaga działającego release/issuer/API i jest zaplanowana w etapie 3; nie umieszczamy pozornie działającego instalatora w gałęzi dokumentacji.
+
+## Profil hosta
+
+Profil centralny Linux Basic (21-profiles.md) jest osobny od lokalnego diagnostic capability. Wybór profilu i grupy przed enrollment nie nadaje roota ani uprawnień SSH, nie włącza harmonogramów. Po niezależnym potwierdzeniu i aktywacji pokazujemy effective config, źródła i ograniczenia. Zmiana profilu wymaga revision i recheck planów.

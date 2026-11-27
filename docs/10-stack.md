@@ -64,3 +64,5 @@ PostgreSQL: explicit transactions, row locks/leases, unique idempotency keys, du
 To propozycja, nie zaimplementowana zmiana i nie wynik testów. Poprzedni main i PR #22 pozostają nietknięte.
 
 Sakura Task v1: ścisły podzbiór YAML 1.2/JSON, JSON Schema Draft 2020-12 i walidacja semantyczna Go, canonical JSON dla digestu po testach, osobny rejestr kontraktów akcji. Protobuf transportuje podpisane pojedyncze akcje; nie jest językiem autora zadania. Biblioteki parsera, schema i canonicalizacji przypiąć po spike. Zobacz 14-workflow-engine.md.
+
+Dalsze decyzje implementacyjne: 13-agent-protocol.md, 22-data-model.md, 23-api-contract.md; konkretne wersje bibliotek i wire schema dopiero po spike. AGENTS.md i DESIGN.md obowiązują wykonawców. Wszystkie propozycje zachowują Go/Svelte i brak obowiązkowego runtime innych języków.

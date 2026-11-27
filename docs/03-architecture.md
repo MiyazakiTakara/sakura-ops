@@ -98,3 +98,7 @@ Parser skr i GUI wywołują identyczne usługi aplikacyjne, a kontekst trybu nie
 ## Sakura Task v1
 
 Jeden format YAML/JSON dla zadań wbudowanych i własnych; normalizacja i walidacja w Go, immutable TaskVersion. Rejestr ActionContract dostarczany z release określa typy, efekty i ryzyko niezależnie od deklaracji. Worker orkiestruje kroki per host, agent otrzymuje tylko podpisane typowane zlecenie pojedynczej akcji i niezależnie egzekwuje lokalną politykę. Adapter jest wybierany z zaufanego rejestru dla dystrybucji/capabilities; brak dowolnego shell lub adapter override. Zobacz 14-workflow-engine.md.
+
+## Kontrakty wykonawcze
+
+22-data-model.md rozwija model relacyjny, 23-api-contract.md REST, 13-agent-protocol.md gRPC, 15-permissions.md uprawnienia, 21-profiles.md dziedziczenie i lokalną politykę. W razie kolizji z wcześniejszym zarysem te nowsze dokumenty stanowią proponowane doprecyzowanie; nie omijają bramek i wymagają review w P01/P02. Grupy w MVP są organizacją/scope, profil dokładnie jeden, security deny/intersection.

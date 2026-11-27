@@ -69,3 +69,7 @@ Połącz SSH otwiera nową kartę w tym samym oknie. Karta skr i karta SSH mają
 ## Dostępność i odbiór
 
 Loading/empty/error/forbidden/stale/retry w odpowiednich widokach; formularze zachowują dane bez sekretów. Widoczny fokus, etykiety, Escape i przywrócenie fokusu, komunikat stanu nie tylko kolorem; WCAG AA 4.5:1 dla zwykłego i 3:1 dla dużego tekstu. Reflow desktop/tablet/mobile, bez globalnego poziomego scrolla, touch targets 44px, reduced motion. Test 360, 768, 1280, 1920 px, 200% zoom i klawiatura. Terminal WWW: reflow okna, klawiatura, high DPI, poprawne przewijanie, Unicode i resize PTY tylko dla sesji SSH. Każdy przycisk działa lub nie jest pokazywany. Odbiór użytkowy: administrator bez dokumentacji technicznej dodaje host, uruchamia diagnostykę, znajduje wynik, rozpoznaje problem z połączeniem, nawiązuje dozwoloną sesję. To kryteria przyszłego testu, nie wyniki już wykonane.
+
+## Szczegółowy projekt
+
+DESIGN.md jest głównym standardem wizualnym, 12-design-system.md definiuje route i stany, 21-profiles.md rozdziela grupy, profile i środowisko. W MVP Linux Basic, odczyt D0; harmonogramy, SSH i mutacje dopiero w odpowiednich etapach. Historia w Zadaniach, Aktualizacje/Grupy/Profile w Serwerach, nie dodatkowe główne menu.

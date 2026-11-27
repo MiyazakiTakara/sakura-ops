@@ -1,6 +1,6 @@
 # 08. Plan realizacji, backlog i bramki
 
-Identyfikatory NEXT są zadaniami planu, nie utworzonymi GitHub Issues. Realizować małymi PR do dedykowanej gałęzi integracyjnej Next, nie do starego main. Każdy PR: konkretna funkcja, pozytywne i negatywne testy, instrukcja QA, review i aktualizacja dokumentacji. CI na pull_request, brak deploy na push. Nie tworzymy tutaj issues ani automatycznych PR bez osobnego zlecenia.
+Identyfikatory NEXT są stabilnymi podzadaniami planu, grupowanymi w pakiety P01–P21 w 25-backlog.md. Mapa rzeczywistych GitHub Issues jest tam uzupełniana po utworzeniu. Realizować małymi PR do dedykowanej gałęzi integracyjnej Next, nie do starego main. Każdy PR: konkretna funkcja, pozytywne i negatywne testy, instrukcja QA, review i aktualizacja dokumentacji. CI na pull_request, brak deploy na push. Nie tworzymy automatycznych PR ani nie zamykamy legacy issues.
 
 ## 0. Fundament (NEXT-001..006)
 - 001 ADR: zatwierdzenie modelu agent/hub zamiast Ansible, zakres Linux-only i terminala WWW, model zagrożeń i granice.
@@ -21,7 +21,7 @@ Odbiór: świeży clone w lab uruchamia health i CI; zero dostępu do zdalnych h
 Odbiór: viewer nie mutuje, inna grupa nie widzi hosta, brak dowolnego shell i brak remote access.
 
 ## 2. Rejestr, protokół i kolejka lokalna (NEXT-013..021)
-- 013 Host/Group/AgentIdentity, wersjonowanie, scope, retirement; lista i karta.
+- 013 Host/Group/AgentIdentity/Profile, wersjonowanie, scope, retirement; lista i karta; 21-profiles.md i 22-data-model.md.
 - 014 Sakura Task v1: wspólny parser YAML/JSON, schema, walidacja semantyczna, ActionContract registry, immutable TaskVersion/digest, fixed localhost/simulator action, wizard; 14-workflow-engine.md.
 - 015 Immutable Plan, RBAC, expiry, podpis i nonce, stale checks.
 - 016 Agent core Go: protokół, strict parser, lokalny journal, typed action registry, nie-root.
@@ -51,7 +51,7 @@ Odbiór: jedno zaproszenie + jedno uruchomienie zweryfikowanego skryptu + niezal
 - 034 Katalog i wizard, batch results, retry odczytów i eksport sanitized.
 - 035 Parzystość GUI i skr dla server/task/run; opcjonalny tekstowy CLI Linux --json, help, scoped token.
 - 036 UX E2E, keyboard/mobile, lab regression i brak nieautoryzowanych zmian.
-Odbiór MVP: od pustej instalacji do rejestru hostów, diagnostyki, raportu aktualizacji/usług/zasobów. Wszystkie profile modyfikujące i access connector wyłączone.
+Odbiór MVP (11-mvp.md): od pustej instalacji do rejestru hostów, diagnostyki, raportu aktualizacji/usług/zasobów. Wszystkie profile modyfikujące i access connector wyłączone.
 
 ## 5. Harmonogramy i powiadomienia (NEXT-037..041)
 - 037 Scheduler UTC/IANA, occurrence unique, scoped grant, DST/missed runs.
@@ -144,3 +144,7 @@ NEXT-006/011/012: pływające okno, działające tryby i parser, focus/resize, h
 ## Bramka jednolitych zadań
 
 NEXT-014/016: ten sam Task v1 dla builtin i custom, test równoważności YAML/JSON, odmowa złych definicji, schema i trusted action registry. NEXT-030..036: sekwencje D0 i adaptery APT/DNF, ten sam kontrakt wyników, nieobsługiwane akcje blokowane. NEXT-052..059 i 063..065: oddzielny odbiór zmian i helpera. Każdy z 18 manifestów builtin/tasks jest objęty testem schema, kontraktu, polityki i macierzy wspieranych OS. Nie aktywować zadania bez działającego i odebranego adaptera. Brak specjalnego runnera dla zadań wbudowanych.
+
+## Specyfikacje wykonawcze
+
+AGENTS.md i DESIGN.md w root; 11–25 opisują szczegółowo MVP, UI, protokół, permissions, OS, lab, workflow pracy, release, zagrożenia, profile, dane, API i aktualizacje. P01 zaczyna się review/spike, nie produkcyjną instalacją. Profil Linux Basic w MVP, reszta presetów nieaktywna do odbioru. GitHub pakiety nie zastępują acceptance NEXT.

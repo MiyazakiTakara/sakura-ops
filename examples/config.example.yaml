@@ -22,6 +22,10 @@ terminal:
   skr_enabled: true
   ssh_web_enabled: false
   optional_git_enabled: false
+profiles:
+  default_host_profile: linux-basic
+  default_host_profile_version: 1
+  auto_activate_suggested_schedules: false
 policy:
   privileged_actions_enabled: false
   remote_access_enabled: false

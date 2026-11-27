@@ -1,0 +1,21 @@
+# Projekt profilu (nie Sakura Task i nie konfiguracja wdrożeniowa).
+id: linux-basic
+version: 1
+name: Linux Basic
+defaults:
+  disk_warning_percent: 80
+  disk_critical_percent: 90
+tasks:
+  - {id: agent-ping, version: 1}
+  - {id: linux-facts, version: 1}
+  - {id: linux-resources, version: 1}
+  - {id: linux-updates-audit, version: 1}
+  - {id: agent-version, version: 1}
+restrictions:
+  allowed_risk: [D0]
+  remote_access: false
+  privileged_actions: false
+suggested_schedules:
+  - task: {id: linux-updates-audit, version: 1}
+    local_time: "07:00"
+    enabled: false

@@ -1,0 +1,19 @@
+# Projekt profilu, nie nadaje uprawnień lokalnych; wymaga odbioru adapterów.
+id: web-server
+version: 1
+name: Web Server
+defaults:
+  disk_warning_percent: 80
+tasks:
+  - {id: agent-ping, version: 1}
+  - {id: linux-facts, version: 1}
+  - {id: linux-resources, version: 1}
+  - {id: linux-updates-audit, version: 1}
+  - {id: linux-services-status, version: 1}
+  - {id: linux-certificates-audit, version: 1}
+restrictions:
+  allowed_risk: [D0]
+  remote_access: false
+  privileged_actions: false
+# Service/certificate IDs muszą być jawnie zatwierdzone per host.
+suggested_schedules: []
