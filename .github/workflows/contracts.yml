@@ -36,7 +36,15 @@ jobs:
             go.sum
             tools/go.sum
       - run: make web-install
+      # Fail closed: the base ref must resolve and contain both contracts; no bootstrap skip in CI.
+      - name: Verify base ref
+        run: |
+          git rev-parse --verify "origin/v2/native-agent-blueprint^{commit}"
+          echo "PROTO_BASE=origin/v2/native-agent-blueprint = $(git rev-parse origin/v2/native-agent-blueprint)"
       - run: make contracts-check
+        env:
+          CONTRACT_BASE_REQUIRED: "1"
       - run: make contracts-test
       - run: make proto-breaking-test
       - run: make openapi-breaking-test
+      - run: make contracts-real-history-test
