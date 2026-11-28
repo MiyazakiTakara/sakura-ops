@@ -54,6 +54,7 @@ make proto-breaking     # buf breaking (FILE) against origin/v2/native-agent-blu
 make proto-breaking-test # scripts/proto-breaking_test.sh: fail-closed and post-bootstrap cases
 make openapi-breaking   # oasdiff breaking changes (ERR and WARN fail) against the same base
 make openapi-breaking-test # scripts/openapi-breaking_test.sh: same cases for the OpenAPI document
+make contracts-real-history-test # local clone at the real base commit: unchanged passes, broken proto/OpenAPI fail
 ```
 
 `contracts-check` also runs `buf lint` (STANDARD, via `make agent-proto`). Two rules are
@@ -74,21 +75,29 @@ with `make PROTO_BASE=<ref>`). It fails closed:
    and exits non-zero. It never skips here.
 2. On the resolved commit SHA, `git ls-tree --name-only <sha> -- proto/buf.yaml` decides whether
    the module exists. A git error fails the target.
-3. The single skip condition: a verified commit that genuinely lacks `proto/buf.yaml` (the first
-   PR that adds the module). The message prints the resolved SHA. Nothing to break in a new contract.
-4. Otherwise `buf breaking` runs against that SHA (not the symbolic ref).
+3. A verified commit that lacks `proto/buf.yaml` is an error too: `CONTRACT_BASE_REQUIRED` defaults
+   to `1` (fail closed). The only way to skip is the explicit local opt-out
+   `make CONTRACT_BASE_REQUIRED=0 proto-breaking`, meant for bootstrapping a brand new contract
+   (the contracts now exist on the integration base, so this is no longer needed). CI never sets it.
+4. Otherwise `buf breaking` runs against that SHA (not the symbolic ref) and logs
+   `running buf breaking against <ref> (<sha>)`.
 
-CI checks out with `fetch-depth: 0` so the base ref resolves; no step relies on a skip.
+CI checks out with `fetch-depth: 0` so `origin/v2/native-agent-blueprint` resolves; a "Verify base ref"
+step fails the job if it does not and logs the base SHA. No step can skip silently.
 `make proto-breaking-test` builds temporary git repos (no network) and covers: unresolvable base,
-base without the module (skip + SHA), post-bootstrap compatible change (passes), post-bootstrap
+base without the module (fails; explicit `CONTRACT_BASE_REQUIRED=0` skips with SHA), post-bootstrap compatible change (passes), post-bootstrap
 breaking change (buf fails), and non-commit object / non-git directory / missing tree object
 (fail). It uses the pinned buf from `tools/go.mod` and runs in the contracts workflow.
 
 `make openapi-breaking` (`scripts/openapi-breaking.sh`, oasdiff pinned in `tools/go.mod`) has the same
 fail-closed structure: an unresolvable base fails, a verified base without
-`api/openapi/sakuraops.v1.yaml` skips and prints the SHA, a spec deleted from the working tree fails, and
+`api/openapi/sakuraops.v1.yaml` fails unless `CONTRACT_BASE_REQUIRED=0` is set explicitly, a spec deleted from the working tree fails, and
 otherwise `oasdiff breaking --fail-on WARN` compares the base copy with the working tree.
-`make openapi-breaking-test` covers these cases in temporary repos. `internal/api/openapi_valid_test.go`
+`make openapi-breaking-test` covers these cases in temporary repos.
+`make contracts-real-history-test` (`scripts/contracts-real-history_test.sh`) clones this repository
+locally at the base SHA (no network), asserts the unchanged real contracts pass with log evidence that
+`buf breaking` and `oasdiff` ran, and that a changed field type, a changed field number and a removed
+OpenAPI path fail. It runs in the contracts workflow. `internal/api/openapi_valid_test.go`
 loads and validates the document with kin-openapi (no external refs) and has a negative case.
 
 ## What the schema does not enforce
