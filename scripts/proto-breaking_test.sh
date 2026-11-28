@@ -43,9 +43,13 @@ else case $out in *origin/does-not-exist*) ok "a: unresolvable base fails with m
 d=$tmp/b; newrepo "$d"
 sha=$(git -C "$d" rev-parse HEAD)
 addproto "$d"
-if out=$("$script" HEAD "$d" 2>&1); then
-	case $out in *"$sha"*"nothing to compare"*) ok "b: module absent on base skips with SHA";; *) bad "b: skip message lacks SHA: $out";; esac
-else bad "b: expected skip, got failure: $out"; fi
+if out=$(CONTRACT_BASE_REQUIRED=0 "$script" HEAD "$d" 2>&1); then
+	case $out in *"$sha"*"nothing to compare"*) ok "b1: explicit CONTRACT_BASE_REQUIRED=0 skips with SHA";; *) bad "b1: skip message lacks SHA: $out";; esac
+else bad "b1: expected explicit skip, got failure: $out"; fi
+if out=$(CONTRACT_BASE_REQUIRED=1 "$script" HEAD "$d" 2>&1); then bad "b2: absent module with CONTRACT_BASE_REQUIRED=1 must fail"
+else case $out in *"$sha"*"refusing to skip"*) ok "b2: absent module with requirement on fails";; *) bad "b2: wrong message: $out";; esac; fi
+if out=$(env -u CONTRACT_BASE_REQUIRED "$script" HEAD "$d" 2>&1); then bad "b3: absent module must fail by default"
+else ok "b3: absent module fails by default (fail closed)"; fi
 
 # c. post-bootstrap: base has the module
 d=$tmp/c; newrepo "$d"; addproto "$d"
