@@ -167,8 +167,11 @@ document, has no `matches` array or `matches: null` (an empty array is a valid c
 `source` of type `image`, was not produced by `descriptor.name` `grype` with the pinned version
 (read from `scripts/install-grype.sh`), or any match lacks vulnerability id, severity, artifact name
 or artifact version. Image identity must equal the expectation: external images must list the pinned
-digest in `source.target.repoDigests` (or as `manifestDigest`); local images must have
-`source.target.imageID` equal to `docker image inspect --format '{{.Id}}'` of the image just built.
+digest in `source.target.repoDigests` (or as `manifestDigest`); local images must match
+`docker image inspect --format '{{.Id}}'` of the image just built exactly, either as
+`source.target.imageID` (classic Docker image store: config digest) or as the digest of a
+`source.target.repoDigests` entry (containerd image store, the default on current Docker and GitHub
+runners, where `.Id` is the image index digest). The comparison is an exact SHA-256 match in both cases.
 
 Scanner: grype 0.122.1, installed by `scripts/install-grype.sh` with a pinned SHA-256 of the release
 archive (same pattern as syft and gitleaks; no `latest`, no `curl | sh`). Grype was chosen over

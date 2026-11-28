@@ -183,8 +183,19 @@ func ParseReport(image string, b []byte, want Expect) (*Report, error) {
 	t := r.Source.Target
 	identity := ""
 	if want.ImageID != "" {
-		if t.ImageID != want.ImageID {
-			return fail("source image ID %q does not match expected %q", t.ImageID, want.ImageID)
+		// The classic Docker image store reports the config digest as the image
+		// ID (grype: imageID). With the containerd image store (default on
+		// current Docker, e.g. GitHub runners) `docker image inspect .Id` is the
+		// image index digest, which grype lists in repoDigests as
+		// "<name>@<digest>". Both are exact SHA-256 identities of the same image.
+		ok := t.ImageID == want.ImageID
+		for _, d := range t.RepoDigests {
+			if strings.HasSuffix(d, "@"+want.ImageID) {
+				ok = true
+			}
+		}
+		if !ok {
+			return fail("source image ID %q (repo digests %v) does not match expected %q", t.ImageID, t.RepoDigests, want.ImageID)
 		}
 		identity = want.ImageID
 	} else {

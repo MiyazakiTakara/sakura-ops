@@ -235,6 +235,15 @@ func TestParseReportRejects(t *testing.T) {
 			s["target"].(map[string]any)["manifestDigest"] = other
 		}), extWant},
 		{"wrong image ID", report(nil), Expect{GrypeVersion: "0.122.1", ImageID: "sha256:bbbb"}},
+		{"local ID only as repo digest prefix", src(func(s map[string]any) {
+			s["target"].(map[string]any)["imageID"] = "sha256:cfg"
+			s["target"].(map[string]any)["repoDigests"] = []string{"sakuraops-image-scan-hub@sha256:aaaa0"}
+		}), localWant},
+		{"local ID only as manifest digest", src(func(s map[string]any) {
+			s["target"].(map[string]any)["imageID"] = "sha256:cfg"
+			s["target"].(map[string]any)["manifestDigest"] = "sha256:aaaa"
+			s["target"].(map[string]any)["repoDigests"] = []string{}
+		}), localWant},
 		{"external report offered as local ID without imageID", src(func(s map[string]any) { delete(s["target"].(map[string]any), "imageID") }), localWant},
 		{"no expectation", report(nil), Expect{GrypeVersion: "0.122.1"}},
 		{"both expectations", report(nil), Expect{GrypeVersion: "0.122.1", Digest: dg, ImageID: "sha256:aaaa"}},
@@ -271,6 +280,21 @@ func TestTrimmedRealFixture(t *testing.T) {
 	}
 	r, err := ParseReport("postgres", b, extWant)
 	if err != nil || r.Matches != 2 || len(r.Findings) != 1 {
+		t.Fatalf("%v %+v", err, r)
+	}
+}
+
+// Containerd image store (CI runners): `docker image inspect .Id` is the index
+// digest, which grype reports in repoDigests, not as imageID.
+func TestParseReportAcceptsContainerdLocalID(t *testing.T) {
+	id := "sha256:" + strings.Repeat("c", 64)
+	in := report(func(m map[string]any) {
+		tg := m["source"].(map[string]any)["target"].(map[string]any)
+		tg["imageID"] = "sha256:" + strings.Repeat("e", 64)
+		tg["repoDigests"] = []string{"sakuraops-image-scan-hub@" + id}
+	})
+	r, err := ParseReport("hub", in, Expect{GrypeVersion: "0.122.1", ImageID: id})
+	if err != nil || r.Identity != id {
 		t.Fatalf("%v %+v", err, r)
 	}
 }
