@@ -22,7 +22,7 @@ deps-audit: vuln
 ## supply-chain: SBOM, licence policy and vulnerability audit.
 supply-chain: license-check deps-audit
 
-## image-scan: build the hub image, scan it and the pinned postgres image with grype (needs docker, network).
+## image-scan: scan every image of compose.dev.yaml (built targets, pinned externals) with grype (needs docker, network).
 ## Fails on HIGH/CRITICAL with a fix, warns on unfixed ones; exceptions only via supply-chain/image-scan-ignore.json.
 image-scan:
 	./scripts/install-syft.sh

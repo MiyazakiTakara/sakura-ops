@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -17,11 +18,16 @@ import (
 
 const dateLayout = "2006-01-02"
 
-// IgnoreEntry is one reviewed exception for exactly one finding.
+// IgnoreEntry is one reviewed exception for exactly one finding: advisory id,
+// image label, image identity (repo digest for external images; the image ID
+// for locally built ones, which changes with every build, so local exceptions
+// are per build and discouraged), package name and exact package version.
 type IgnoreEntry struct {
 	ID       string `json:"id"`
 	Image    string `json:"image"`
+	Digest   string `json:"digest"`
 	Package  string `json:"package"`
+	Version  string `json:"version"`
 	Reason   string `json:"reason"`
 	Reviewer string `json:"reviewer"`
 	Expires  string `json:"expires"`
@@ -57,7 +63,7 @@ func ParseIgnore(b []byte) (*IgnoreFile, error) {
 	seen := map[string]bool{}
 	for i := range f.Ignores {
 		e := &f.Ignores[i]
-		for name, v := range map[string]string{"id": e.ID, "image": e.Image, "package": e.Package,
+		for name, v := range map[string]string{"id": e.ID, "image": e.Image, "digest": e.Digest, "package": e.Package, "version": e.Version,
 			"reason": e.Reason, "reviewer": e.Reviewer, "expires": e.Expires} {
 			if strings.TrimSpace(v) == "" {
 				return nil, fmt.Errorf("ignore entry %d: missing %s", i, name)
@@ -71,7 +77,7 @@ func ParseIgnore(b []byte) (*IgnoreFile, error) {
 			return nil, fmt.Errorf("ignore entry %d: expires must be YYYY-MM-DD: %w", i, err)
 		}
 		e.expires = t
-		key := e.ID + "|" + e.Image + "|" + e.Package
+		key := e.ID + "|" + e.Image + "|" + e.Digest + "|" + e.Package + "|" + e.Version
 		if seen[key] {
 			return nil, fmt.Errorf("ignore entry %d: duplicate %s", i, key)
 		}
@@ -83,6 +89,7 @@ func ParseIgnore(b []byte) (*IgnoreFile, error) {
 // Finding is one HIGH or CRITICAL match.
 type Finding struct {
 	Image    string
+	Digest   string // identity of the scanned image (repo digest or local image ID)
 	ID       string
 	Related  []string
 	Severity string
@@ -91,45 +98,120 @@ type Finding struct {
 	Fixed    []string
 }
 
-type grypeReport struct {
-	Matches []struct {
-		Vulnerability struct {
-			ID       string `json:"id"`
-			Severity string `json:"severity"`
-			Fix      struct {
-				Versions []string `json:"versions"`
-				State    string   `json:"state"`
-			} `json:"fix"`
-		} `json:"vulnerability"`
-		Related []struct {
-			ID string `json:"id"`
-		} `json:"relatedVulnerabilities"`
-		Artifact struct {
-			Name    string `json:"name"`
-			Version string `json:"version"`
-		} `json:"artifact"`
-	} `json:"matches"`
-	Source *struct{} `json:"source"`
+// Expect is what a report must prove about itself.
+type Expect struct {
+	GrypeVersion string // pinned grype version, e.g. 0.122.1
+	Digest       string // external image: pinned sha256:<hex>; empty for local images
+	ImageID      string // locally built image: docker image ID sha256:<hex>; empty for external
 }
 
-// ParseReport extracts HIGH and CRITICAL findings from a grype JSON report.
-// A report without a "source" object is rejected so that an empty or wrong
-// file cannot pass as a clean scan.
-func ParseReport(image string, b []byte) ([]Finding, error) {
+// Report is the validated, summarised content of one grype report.
+type Report struct {
+	Image    string
+	Identity string
+	Matches  int // all matches, any severity
+	Findings []Finding
+}
+
+type grypeMatch struct {
+	Vulnerability struct {
+		ID       string `json:"id"`
+		Severity string `json:"severity"`
+		Fix      struct {
+			Versions []string `json:"versions"`
+			State    string   `json:"state"`
+		} `json:"fix"`
+	} `json:"vulnerability"`
+	Related []struct {
+		ID string `json:"id"`
+	} `json:"relatedVulnerabilities"`
+	Artifact struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"artifact"`
+}
+
+type grypeReport struct {
+	Matches *[]grypeMatch `json:"matches"`
+	Source  *struct {
+		Type   string `json:"type"`
+		Target *struct {
+			ImageID        string   `json:"imageID"`
+			ManifestDigest string   `json:"manifestDigest"`
+			RepoDigests    []string `json:"repoDigests"`
+		} `json:"target"`
+	} `json:"source"`
+	Descriptor *struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"descriptor"`
+}
+
+// ParseReport validates a grype JSON report and extracts its HIGH and CRITICAL
+// findings. It is deliberately strict so that an empty, truncated, foreign or
+// wrong-image file cannot pass as a clean scan: the document must be a single
+// JSON value with a non-null matches array, an image source whose identity
+// equals the expected one, a grype descriptor of the pinned version, and every
+// match must carry id, severity, package name and version.
+func ParseReport(image string, b []byte, want Expect) (*Report, error) {
+	fail := func(format string, a ...any) (*Report, error) {
+		return nil, fmt.Errorf("%s: %s", image, fmt.Sprintf(format, a...))
+	}
+	if (want.Digest == "") == (want.ImageID == "") {
+		return fail("exactly one of expected digest or expected image ID is required")
+	}
+	if want.GrypeVersion == "" {
+		return fail("expected grype version is required")
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
 	var r grypeReport
-	if err := json.Unmarshal(b, &r); err != nil {
-		return nil, fmt.Errorf("%s: parse grype report: %w", image, err)
+	if err := dec.Decode(&r); err != nil {
+		return fail("parse grype report: %v", err)
 	}
-	if r.Source == nil {
-		return nil, fmt.Errorf("%s: not a grype report (no source)", image)
+	if _, err := dec.Token(); err != io.EOF {
+		return fail("parse grype report: trailing data")
 	}
-	var out []Finding
-	for _, m := range r.Matches {
+	if r.Descriptor == nil || r.Descriptor.Name != "grype" {
+		return fail("not a grype report (descriptor.name)")
+	}
+	if r.Descriptor.Version != want.GrypeVersion {
+		return fail("grype version %q, want %q", r.Descriptor.Version, want.GrypeVersion)
+	}
+	if r.Source == nil || r.Source.Type != "image" || r.Source.Target == nil {
+		return fail("report source is missing or not an image")
+	}
+	t := r.Source.Target
+	identity := ""
+	if want.ImageID != "" {
+		if t.ImageID != want.ImageID {
+			return fail("source image ID %q does not match expected %q", t.ImageID, want.ImageID)
+		}
+		identity = want.ImageID
+	} else {
+		ok := t.ManifestDigest == want.Digest
+		for _, d := range t.RepoDigests {
+			if strings.HasSuffix(d, "@"+want.Digest) {
+				ok = true
+			}
+		}
+		if !ok {
+			return fail("source does not carry expected digest %s", want.Digest)
+		}
+		identity = want.Digest
+	}
+	if r.Matches == nil {
+		return fail("report has no matches array (null or missing)")
+	}
+	rep := &Report{Image: image, Identity: identity, Matches: len(*r.Matches)}
+	for i, m := range *r.Matches {
+		if m.Vulnerability.ID == "" || m.Vulnerability.Severity == "" || m.Artifact.Name == "" || m.Artifact.Version == "" {
+			return fail("match %d lacks vulnerability id, severity, artifact name or version", i)
+		}
 		sev := strings.ToUpper(m.Vulnerability.Severity)
 		if sev != "HIGH" && sev != "CRITICAL" {
 			continue
 		}
-		f := Finding{Image: image, ID: m.Vulnerability.ID, Severity: sev,
+		f := Finding{Image: image, Digest: identity, ID: m.Vulnerability.ID, Severity: sev,
 			Package: m.Artifact.Name, Version: m.Artifact.Version}
 		for _, rel := range m.Related {
 			f.Related = append(f.Related, rel.ID)
@@ -138,9 +220,9 @@ func ParseReport(image string, b []byte) ([]Finding, error) {
 		if len(f.Fixed) == 0 && strings.EqualFold(m.Vulnerability.Fix.State, "fixed") {
 			f.Fixed = []string{"(fixed, version not listed)"}
 		}
-		out = append(out, f)
+		rep.Findings = append(rep.Findings, f)
 	}
-	return out, nil
+	return rep, nil
 }
 
 // Result is the outcome of Evaluate.
@@ -155,7 +237,7 @@ type Result struct {
 func (r Result) OK() bool { return len(r.Failures) == 0 && len(r.Problems) == 0 }
 
 func (e IgnoreEntry) matches(f Finding) bool {
-	if e.Image != f.Image || e.Package != f.Package {
+	if e.Image != f.Image || e.Digest != f.Digest || e.Package != f.Package || e.Version != f.Version {
 		return false
 	}
 	if e.ID == f.ID {
@@ -177,8 +259,8 @@ func Evaluate(findings []Finding, ign *IgnoreFile, now time.Time) Result {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	for _, e := range ign.Ignores {
 		if today.After(e.expires) {
-			res.Problems = append(res.Problems, fmt.Sprintf("expired ignore entry: %s %s %s (expired %s, reviewer %s)",
-				e.ID, e.Image, e.Package, e.Expires, e.Reviewer))
+			res.Problems = append(res.Problems, fmt.Sprintf("expired ignore entry: %s %s %s %s@%s (expired %s, reviewer %s)",
+				e.ID, e.Image, e.Digest, e.Package, e.Version, e.Expires, e.Reviewer))
 		}
 	}
 	for _, f := range findings {
@@ -201,8 +283,8 @@ func Evaluate(findings []Finding, ign *IgnoreFile, now time.Time) Result {
 	}
 	for i, e := range ign.Ignores {
 		if !used[i] {
-			res.Problems = append(res.Problems, fmt.Sprintf("unused ignore entry: %s %s %s (matches no HIGH/CRITICAL finding; remove it)",
-				e.ID, e.Image, e.Package))
+			res.Problems = append(res.Problems, fmt.Sprintf("unused ignore entry: %s %s %s %s@%s (matches no HIGH/CRITICAL finding; remove it)",
+				e.ID, e.Image, e.Digest, e.Package, e.Version))
 		}
 	}
 	for _, s := range [][]Finding{res.Failures, res.Warnings, res.Suppressed} {
@@ -214,4 +296,34 @@ func Evaluate(findings []Finding, ign *IgnoreFile, now time.Time) Result {
 		})
 	}
 	return res
+}
+
+// ImageSummary counts findings of one image after policy evaluation.
+type ImageSummary struct {
+	Image      string
+	Matches    int // all matches, any severity
+	Fixable    int
+	Warnings   int
+	Suppressed int
+}
+
+// Summarize returns per-image counts (in report order) and the number of
+// distinct advisory ids among all HIGH/CRITICAL findings, ignored or not.
+func Summarize(reports []*Report, res Result) (perImage []ImageSummary, distinct int) {
+	idx := map[string]int{}
+	for _, r := range reports {
+		idx[r.Image] = len(perImage)
+		perImage = append(perImage, ImageSummary{Image: r.Image, Matches: r.Matches})
+	}
+	ids := map[string]bool{}
+	count := func(fs []Finding, add func(*ImageSummary)) {
+		for _, f := range fs {
+			ids[f.ID] = true
+			add(&perImage[idx[f.Image]])
+		}
+	}
+	count(res.Failures, func(s *ImageSummary) { s.Fixable++ })
+	count(res.Warnings, func(s *ImageSummary) { s.Warnings++ })
+	count(res.Suppressed, func(s *ImageSummary) { s.Suppressed++ })
+	return perImage, len(ids)
 }

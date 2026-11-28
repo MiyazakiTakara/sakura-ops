@@ -12,7 +12,7 @@ here runs on pull requests only (`.github/workflows/supply-chain.yml`) and local
 | `make license-check` | Runs `sbom`, then `cmd/licensecheck` against `supply-chain/license-policy.json`. |
 | `make deps-audit` | `govulncheck` (`make vuln`) plus `npm audit` on the lockfile. |
 | `make supply-chain` | `license-check` and `deps-audit`. |
-| `make image-scan` | Builds the hub image and scans it plus the pinned postgres image (see Image scanning). Not part of `supply-chain`: needs docker. |
+| `make image-scan` | Scans every image from the dev Compose file: pinned external images and locally built targets (see Image scanning). Not part of `supply-chain`: needs docker. |
 
 `make supply-chain` needs network (module cache, npm registry, Go and npm advisory databases) and
 `make web-install` done beforehand (the `build` step needs the frontend dependencies).
@@ -139,11 +139,33 @@ get a reviewed exception.
 
 ## Image scanning
 
-`make image-scan` (CI job `Container image vulnerability scan`, `scripts/image-scan.sh`) builds the
-hub image from `deployment/docker/hub.Dockerfile` (the Dockerfile Compose uses, local tag
-`sakuraops-hub:image-scan-local`, override with `IMAGE_TAG`), pulls the PostgreSQL image pinned by
-digest in `deployment/compose/compose.dev.yaml` (the digest is read from that file, so the scan
-cannot drift from what Compose runs) and scans both with grype. Needs docker and network.
+`make image-scan` (CI job `Container image vulnerability scan`, `scripts/image-scan.sh`) scans every
+image the dev Compose file uses. The set is derived from `deployment/compose/compose.dev.yaml` by
+YAML parsing in Go (`imagescan plan -compose <file>`, tab-separated output), never by grep:
+
+- **External images** must be digest-pinned (`name@sha256:<64 hex>`). Identical references listed by
+  several services (postgres and db-bootstrap) are scanned once. The same repository with different
+  digests, a tag-only or otherwise unpinned image, a service with neither image nor build, or a file
+  without services is an error. Each digest is pulled and scanned; the image label is the last path
+  element of the repository (`postgres`).
+- **Locally built images**: every service with a `build:` section is built with
+  `docker build --target <target>` from `deployment/docker/hub.Dockerfile` (no target means the last
+  stage) and scanned. The label is the build target, or the service name when there is none
+  (`hub`, and `migrator` once the Compose file has the migrate service). Built images are tagged
+  `sakuraops-image-scan-<label>:local`. The script uses the fixed Dockerfile path above; a build
+  section naming another Dockerfile is not followed.
+
+Needs docker and network. Without docker only `imagescan plan`, the checker and the unit tests can
+be run (see Local run).
+
+Each grype report is validated by `cmd/imagescan` before any policy is applied, so an empty, wrong
+or truncated file cannot pass as a clean scan. A report is rejected when it is not a single JSON
+document, has no `matches` array or `matches: null` (an empty array is a valid clean scan), has no
+`source` of type `image`, was not produced by `descriptor.name` `grype` with the pinned version
+(read from `scripts/install-grype.sh`), or any match lacks vulnerability id, severity, artifact name
+or artifact version. Image identity must equal the expectation: external images must list the pinned
+digest in `source.target.repoDigests` (or as `manifestDigest`); local images must have
+`source.target.imageID` equal to `docker image inspect --format '{{.Id}}'` of the image just built.
 
 Scanner: grype 0.122.1, installed by `scripts/install-grype.sh` with a pinned SHA-256 of the release
 archive (same pattern as syft and gitleaks; no `latest`, no `curl | sh`). Grype was chosen over
@@ -157,22 +179,37 @@ Policy (`internal/imagescan`, `cmd/imagescan`, unit tested; grype itself is run 
 threshold and the verdict comes from the checker):
 
 - HIGH or CRITICAL with a fix available: **fail**.
-- HIGH or CRITICAL without a fix: printed as `WARNING (unfixed)`, does not fail.
+- HIGH or CRITICAL without a fix (including `wont-fix`): printed as `WARNING (unfixed)`, does not
+  fail. These stay visible in every run.
 - Lower severities are not evaluated.
+- The summary prints, per image, total matches, fixable failures, unfixed warnings and ignored
+  findings, plus the number of distinct HIGH/CRITICAL advisory ids across all images.
 - Reports in `bin/image-scan/` (artifact `image-scan-reports`, 7 days): grype JSON and CycloneDX
   SBOM per image. They hold package names, versions and advisory ids only.
 
-Exceptions: only `supply-chain/image-scan-ignore.json`, reviewed in a pull request. Each entry
-has `id` (advisory id, CVE or GHSA, matched against the finding and its related ids), `image`
-(`hub` or `postgres`), `package` (exact name), `reason`, `reviewer` and `expires` (`YYYY-MM-DD`,
-valid through that day). No wildcards, unknown fields or duplicates. An expired entry fails and
-no longer suppresses; an entry that matches no HIGH/CRITICAL finding fails (remove it). Entries
-are per image and package, so a fix elsewhere is not hidden. There is no severity downgrade and no
-exit-code override.
+Exceptions: only `supply-chain/image-scan-ignore.json`, reviewed in a pull request. The file is
+currently `{"ignores": []}`: no risk has been accepted. Each entry has `id` (advisory id, CVE or
+GHSA, matched against the finding and its related ids), `image` (the label, e.g. `postgres`),
+`digest` (the scanned image identity), `package` (exact name), `version` (exact package version),
+`reason`, `reviewer` and `expires` (`YYYY-MM-DD`, valid through that day). A finding is suppressed
+only when all of id, image, digest, package and version are equal. For external images `digest` is
+the pinned `sha256:` digest from Compose, so bumping the pin invalidates the exception. For locally
+built images the digest is the image ID, which changes with every build: such an exception is
+effectively per build and discouraged; fix the dependency instead. No wildcards, unknown fields or
+duplicates. An expired entry fails and no longer suppresses; an entry that matches no HIGH/CRITICAL
+finding fails (remove it). There is no severity downgrade and no exit-code override.
+
+Local run (what was and was not run on a host without docker): `go run ./cmd/imagescan plan`,
+`go test ./internal/imagescan/... ./cmd/imagescan/...` and the checker against a grype report of a
+registry image work without docker, e.g. `bin/tools/grype registry:postgres@sha256:<digest> -o json
+--file r.json` followed by `go run ./cmd/imagescan -grype-version <v> postgres=r.json,digest=sha256:<digest>`.
+The build, pull and `docker image inspect` steps in `scripts/image-scan.sh` need docker and are only
+exercised in CI.
 
 Coverage: OS packages and language packages found by syft in the image layers, including base
-image layers (node and golang stages are build-only and not in the final hub image; the final hub
-image is distroless static plus the Go binary). Limits: only these two images; the final image
+image layers (node and golang stages are build-only and not in the final images; the final hub
+and migrator images are distroless static plus a Go binary). Limits: only the images from the
+Compose file; the final image
 has no package manager database for the Go binary beyond embedded module info; grype matches
 against advisory data and can produce false positives or miss unpublished issues; vulnerabilities
 without distro fix data show as unfixed and only warn; the build-stage images are not scanned.
@@ -192,7 +229,7 @@ Not covered:
   shipped, not in the SBOMs, no licence scan. Scanning it is a follow-up if it ever ships.
 - Other OS and architecture builds. The binary SBOM describes the linux/amd64 build only, and npm
   optional packages for other platforms are in the lockfile but not installed, so not scanned.
-- Container images other than the hub image and the pinned postgres image (see Image scanning).
+- Container images that are not in `compose.dev.yaml` (see Image scanning).
 - Accuracy of licence data: it depends on package metadata and on syft's `LICENSE` detection for
   Go modules; the policy does not prove the identifier is correct.
 - MPL-2.0 modification checks (manual review, see above).

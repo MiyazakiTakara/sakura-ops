@@ -57,7 +57,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      # Builds the hub image, pulls the pinned postgres digest, downloads the grype
+      # Builds every locally built Compose target, pulls each pinned external digest, downloads the grype
       # vulnerability database (no cache: always current) and applies the policy.
       - run: make image-scan
       - name: Upload image reports
