@@ -49,6 +49,15 @@ body_has() { grep -q "$1" "${work}/body"; }
 cid() { dc ps -a -q "$1"; }
 exit_state() { docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$(cid "$1")"; }
 logs_of() { dc logs --no-color "$@" 2>&1; }
+pg_hardened() { # postgres runs as the expected non-root uid, without gosu or capabilities
+  local c; c="$(cid postgres)"
+  [[ "$(docker exec "${c}" id -u)" == "${SAKURAOPS_DEV_UID}" ]] || return 1
+  [[ "${SAKURAOPS_DEV_UID}" != 0 ]] || return 1
+  docker exec "${c}" test ! -e /usr/local/bin/gosu || return 1
+  local add; add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "${c}")"
+  [[ "${add}" == null || "${add}" == "[]" ]] || return 1
+  [[ "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "${c}")" == '["ALL"]' ]]
+}
 admin_sql() { dc exec -T postgres psql -X -tA -v ON_ERROR_STOP=1 -U sakuraops_admin -d sakuraops -c "$1"; }
 no_secret_in() { # text-file ...: none of the generated secret values appears
   local f
@@ -78,6 +87,8 @@ check "fresh: db-bootstrap and migrate exited 0" bash -c '[[ "$1" == "exited 0" 
 check "fresh: migrate applied the baseline" bash -c 'grep -q "applied 00001" <<<"$1"' _ "$(logs_of migrate)"
 check "fresh: /readyz is 200 at schema version ${latest}" bash -c "[[ \$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' ${url}/readyz) == 200 ]]"
 wait_code /readyz 200 30 && body_has "\"schema_version\":${latest}" && ok "fresh: /readyz body reports schema_version ${latest}" || bad "fresh: /readyz body"
+check "fresh: postgres is non-root (uid ${SAKURAOPS_DEV_UID}), no gosu, CapDrop ALL, no CapAdd" pg_hardened
+check "fresh: PGDATA is owned by the postgres uid" bash -c '[[ "$(docker exec "$1" bash -c "stat -c %u \"\$PGDATA\"")" == "$2" ]]' _ "$(cid postgres)" "${SAKURAOPS_DEV_UID}"
 admin_sql "UPDATE sakuraops.instance_settings SET instance_name = 'scenario-marker'" >/dev/null || bad "fresh: could not write marker row"
 
 echo "== scenario 2: restart with the existing volume"
@@ -87,6 +98,7 @@ dc up -d --wait --wait-timeout 300 >/dev/null 2>&1 || bad "restart: dev stack di
 check "restart: migrate is a no-op" bash -c 'grep -q "no migrations to apply" <<<"$1"' _ "$(logs_of migrate)"
 check "restart: bootstrap and migrate exited 0" bash -c '[[ "$1" == "exited 0" && "$2" == "exited 0" ]]' _ "$(exit_state db-bootstrap)" "$(exit_state migrate)"
 wait_code /readyz 200 30 && ok "restart: /readyz is 200 again" || bad "restart: /readyz is not 200"
+check "restart: postgres is still non-root without gosu or capabilities" pg_hardened
 check "restart: data survived (marker row)" bash -c '[[ "$1" == scenario-marker ]]' _ "$(admin_sql "SELECT instance_name FROM sakuraops.instance_settings")"
 
 echo "== scenario 3: database down, then back"

@@ -1,6 +1,7 @@
 # SakuraOps development stack: PostgreSQL + hub. Lab and developer machines only.
 # No TLS (sslmode=disable on the internal network), not a production profile.
-# Containers run as the invoking host user (never 0), see the secrets note at the end.
+# Containers run as the invoking host user (never 0), including postgres (derived image,
+# no gosu); see the secrets note at the end.
 # Flow: postgres -> db-bootstrap (roles.sql, admin credential) -> migrate (migrator DSN
 # only) -> hub (app DSN only). Each container mounts only its own secrets.
 # Usage: make dev-secrets dev-up (see docs/dev/compose.md).
@@ -8,8 +9,15 @@ name: sakuraops-dev
 
 services:
   postgres:
-    # postgres:18-trixie (PostgreSQL 18, current supported major)
-    image: postgres@sha256:64c8b0d31e4ab6ea665e8426ea406a94bf52de3c05b3a4a8bf713704eefa9328
+    # Derived from the pinned official image (see the Dockerfile): gosu removed, non-root.
+    build:
+      context: ../..
+      dockerfile: deployment/docker/postgres.Dockerfile
+      args:
+        POSTGRES_UID: "${SAKURAOPS_DEV_UID:?set by make dev-up}"
+        POSTGRES_GID: "${SAKURAOPS_DEV_GID:?set by make dev-up}"
+    image: sakuraops-dev-postgres:local
+    user: "${SAKURAOPS_DEV_UID:?set by make dev-up}:${SAKURAOPS_DEV_GID:?set by make dev-up}"
     restart: unless-stopped
     environment:
       POSTGRES_USER: sakuraops_admin
@@ -25,12 +33,6 @@ services:
     # Deliberately no "ports:": the database is reachable only on the internal network.
     cap_drop:
       - ALL
-    cap_add: # the image entrypoint starts as root, fixes ownership, then drops to postgres
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - SETGID
-      - SETUID
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -41,9 +43,15 @@ services:
       start_period: 10s
 
   # One-shot: creates the two login roles and the schema with the admin credential.
-  # Same pinned image as postgres (it ships psql). Idempotent; resets role passwords.
+  # Same derived image as postgres (it ships psql). Idempotent; resets role passwords.
   db-bootstrap:
-    image: postgres@sha256:64c8b0d31e4ab6ea665e8426ea406a94bf52de3c05b3a4a8bf713704eefa9328
+    build:
+      context: ../..
+      dockerfile: deployment/docker/postgres.Dockerfile
+      args:
+        POSTGRES_UID: "${SAKURAOPS_DEV_UID:?set by make dev-up}"
+        POSTGRES_GID: "${SAKURAOPS_DEV_GID:?set by make dev-up}"
+    image: sakuraops-dev-postgres:local
     restart: "no"
     user: "${SAKURAOPS_DEV_UID:?set by make dev-up}:${SAKURAOPS_DEV_GID:?set by make dev-up}"
     read_only: true
@@ -142,7 +150,8 @@ volumes:
 # Swarm, Compose bind-mounts them read-only with the host owner and mode and ignores any
 # uid/gid/mode, so the non-root containers (hub, migrate, db-bootstrap) run as the
 # developer's own uid:gid (SAKURAOPS_DEV_UID/GID, set by make) and can read exactly the
-# files they list. No container lists a secret it does not need.
+# files they list. The postgres image is built with that uid:gid for its postgres user and
+# data directory (deployment/docker/postgres.Dockerfile). No container lists a secret it does not need.
 secrets:
   postgres_password: # admin (superuser): postgres and db-bootstrap only
     file: ${SAKURAOPS_DEV_SECRETS_DIR:-../../.dev-secrets}/postgres_password

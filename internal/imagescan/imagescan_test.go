@@ -261,15 +261,145 @@ func TestParseReportRejects(t *testing.T) {
 }
 
 func TestSummarize(t *testing.T) {
-	a := &Report{Image: "a", Matches: 5}
-	b := &Report{Image: "b", Matches: 2}
+	scan := func(img string, dm, sm int) *ImageScan {
+		return &ImageScan{Image: img, Direct: &Report{Image: img, Matches: dm}, SBOM: &Report{Image: img, Matches: sm}}
+	}
 	res := Result{
 		Failures: []Finding{{Image: "a", ID: "CVE-1"}},
 		Warnings: []Finding{{Image: "a", ID: "CVE-1"}, {Image: "b", ID: "CVE-2"}},
 	}
-	per, distinct := Summarize([]*Report{a, b}, res)
-	if distinct != 2 || per[0].Fixable != 1 || per[0].Warnings != 1 || per[1].Warnings != 1 || per[0].Matches != 5 {
+	per, distinct := Summarize([]*ImageScan{scan("a", 5, 7), scan("b", 2, 2)}, res)
+	if distinct != 2 || per[0].Fixable != 1 || per[0].Warnings != 1 || per[1].Warnings != 1 || per[0].DirectMatches != 5 || per[0].SBOMMatches != 7 {
 		t.Fatalf("%+v %d", per, distinct)
+	}
+}
+
+func rpt(img string, fs ...Finding) *Report {
+	for i := range fs {
+		fs[i].Image, fs[i].Digest = img, dg
+	}
+	return &Report{Image: img, Identity: dg, Matches: len(fs), Findings: fs}
+}
+
+func TestCombineUnion(t *testing.T) {
+	a := Finding{ID: "CVE-A", Severity: "HIGH", Package: "stdlib", Version: "go1.24.6"}
+	b := Finding{ID: "CVE-B", Severity: "HIGH", Package: "libc", Version: "1"}
+	c := Finding{ID: "CVE-C", Severity: "CRITICAL", Package: "stdlib", Version: "go1.24.6", Fixed: []string{"1.24.8"}}
+	t.Run("adds findings present in one mode only", func(t *testing.T) {
+		sc, err := Combine("pg", rpt("pg", b), rpt("pg", a, c))
+		if err != nil || len(sc.Findings) != 3 {
+			t.Fatalf("%v %+v", err, sc)
+		}
+		res := Evaluate(sc.Findings, &IgnoreFile{}, now)
+		if res.OK() || len(res.Failures) != 1 || len(res.Warnings) != 2 {
+			t.Fatalf("sbom-only fixable finding must fail the gate: %+v", res)
+		}
+	})
+	t.Run("same finding in both modes counts once", func(t *testing.T) {
+		sc, err := Combine("pg", rpt("pg", a, b), rpt("pg", a, b))
+		if err != nil || len(sc.Findings) != 2 {
+			t.Fatalf("%v %+v", err, sc.Findings)
+		}
+		per, _ := Summarize([]*ImageScan{sc}, Evaluate(sc.Findings, &IgnoreFile{}, now))
+		if per[0].DirectHigh != 2 || per[0].SBOMHigh != 2 || per[0].UnionHigh != 2 || per[0].Warnings != 2 {
+			t.Errorf("%+v", per[0])
+		}
+	})
+	t.Run("same advisory in another version or package stays separate", func(t *testing.T) {
+		a2 := a
+		a2.Version = "go1.25.0"
+		a3 := a
+		a3.Package = "other"
+		sc, err := Combine("pg", rpt("pg", a), rpt("pg", a2, a3))
+		if err != nil || len(sc.Findings) != 3 {
+			t.Fatalf("%v %+v", err, sc.Findings)
+		}
+	})
+	t.Run("disagreement takes the stricter view", func(t *testing.T) {
+		unfixed := Finding{ID: "CVE-C", Severity: "HIGH", Package: "stdlib", Version: "go1.24.6", Related: []string{"GHSA-1"}}
+		sc, err := Combine("pg", rpt("pg", unfixed), rpt("pg", c))
+		if err != nil || len(sc.Findings) != 1 {
+			t.Fatalf("%v %+v", err, sc.Findings)
+		}
+		f := sc.Findings[0]
+		if f.Severity != "CRITICAL" || len(f.Fixed) != 1 || len(f.Related) != 1 {
+			t.Errorf("%+v", f)
+		}
+	})
+	t.Run("missing mode is an error", func(t *testing.T) {
+		if _, err := Combine("pg", rpt("pg", a), nil); err == nil {
+			t.Error("missing sbom report accepted")
+		}
+		if _, err := Combine("pg", nil, rpt("pg", a)); err == nil {
+			t.Error("missing direct report accepted")
+		}
+	})
+	t.Run("different images are rejected", func(t *testing.T) {
+		other := rpt("pg", a)
+		other.Identity = "sha256:" + strings.Repeat("9", 64)
+		if _, err := Combine("pg", rpt("pg", a), other); err == nil {
+			t.Error("mismatching identities accepted")
+		}
+		if _, err := Combine("pg", rpt("pg", a), rpt("hub", a)); err == nil {
+			t.Error("mismatching labels accepted")
+		}
+	})
+}
+
+func syftDoc(mut func(m map[string]any)) []byte {
+	m := map[string]any{
+		"artifacts": []any{map[string]any{"name": "stdlib", "version": "go1.24.6"}},
+		"source": map[string]any{"type": "image", "metadata": map[string]any{
+			"imageID": "sha256:aaaa", "manifestDigest": other,
+			"repoDigests": []string{"index.docker.io/library/postgres@" + dg}}},
+		"descriptor": map[string]any{"name": "syft", "version": "1.57.2"},
+	}
+	if mut != nil {
+		mut(m)
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func TestVerifySBOM(t *testing.T) {
+	if err := VerifySBOM("pg", syftDoc(nil), extWant, "1.57.2"); err != nil {
+		t.Fatalf("valid SBOM: %v", err)
+	}
+	if err := VerifySBOM("hub", syftDoc(nil), localWant, "1.57.2"); err != nil {
+		t.Fatalf("valid SBOM, local id: %v", err)
+	}
+	meta := func(f func(md map[string]any)) []byte {
+		return syftDoc(func(m map[string]any) { f(m["source"].(map[string]any)["metadata"].(map[string]any)) })
+	}
+	set := func(k string, v any) []byte { return syftDoc(func(m map[string]any) { m[k] = v }) }
+	cases := map[string]struct {
+		in   []byte
+		want Expect
+		ver  string
+	}{
+		"wrong digest":      {syftDoc(nil), Expect{GrypeVersion: "x", Digest: "sha256:" + strings.Repeat("7", 64)}, "1.57.2"},
+		"wrong image id":    {syftDoc(nil), Expect{GrypeVersion: "x", ImageID: "sha256:bbbb"}, "1.57.2"},
+		"wrong syft":        {syftDoc(nil), extWant, "1.0.0"},
+		"no syft version":   {syftDoc(nil), extWant, ""},
+		"not syft":          {set("descriptor", map[string]any{"name": "grype", "version": "1.57.2"}), extWant, "1.57.2"},
+		"no descriptor":     {set("descriptor", nil), extWant, "1.57.2"},
+		"source dir":        {set("source", map[string]any{"type": "directory"}), extWant, "1.57.2"},
+		"no metadata":       {set("source", map[string]any{"type": "image"}), extWant, "1.57.2"},
+		"empty artifacts":   {set("artifacts", []any{}), extWant, "1.57.2"},
+		"null artifacts":    {set("artifacts", nil), extWant, "1.57.2"},
+		"garbage":           {[]byte("nope"), extWant, "1.57.2"},
+		"trailing":          {append(syftDoc(nil), []byte(" {}")...), extWant, "1.57.2"},
+		"digest as prefix":  {meta(func(md map[string]any) { md["repoDigests"] = []string{"p@" + dg + "0"}; md["manifestDigest"] = other }), extWant, "1.57.2"},
+		"no expectation":    {syftDoc(nil), Expect{GrypeVersion: "x"}, "1.57.2"},
+		"both expectations": {syftDoc(nil), Expect{Digest: dg, ImageID: "sha256:aaaa"}, "1.57.2"},
+	}
+	for name, c := range cases {
+		if err := VerifySBOM("pg", c.in, c.want, c.ver); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
 	}
 }
 

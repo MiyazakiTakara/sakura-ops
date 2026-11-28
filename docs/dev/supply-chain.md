@@ -144,22 +144,43 @@ image the dev Compose file uses. The set is derived from `deployment/compose/com
 YAML parsing in Go (`imagescan plan -compose <file>`, tab-separated output), never by grep:
 
 - **External images** must be digest-pinned (`name@sha256:<64 hex>`). Identical references listed by
-  several services (postgres and db-bootstrap) are scanned once. The same repository with different
-  digests, a tag-only or otherwise unpinned image, a service with neither image nor build, or a file
-  without services is an error. Each digest is pulled and scanned; the image label is the last path
-  element of the repository (`postgres`).
-- **Locally built images**: every service with a `build:` section is built with
-  `docker build --target <target>` from `deployment/docker/hub.Dockerfile` (no target means the last
-  stage) and scanned. The label is the build target, or the service name when there is none
-  (`hub`, and `migrator` once the Compose file has the migrate service). Built images are tagged
-  `sakuraops-image-scan-<label>:local`. The plan fails closed on build sections: `build` must be a
-  mapping whose `context` resolves to the repository root (`../..` relative to the compose file) and
-  whose `dockerfile` is `deployment/docker/hub.Dockerfile`. Any other context or Dockerfile, a missing
-  one, or the short `build: <path>` form is an error, so the scan can never build a different image
-  than the one the script builds.
+  several services are scanned once. The same repository with different digests, a tag-only or
+  otherwise unpinned image, a service with neither image nor build, or a file without services is an
+  error. Each digest is pulled and scanned; the image label is the last path element of the
+  repository. The current Compose file has none: the PostgreSQL image is derived (below).
+- **Locally built images**: every distinct `build:` section is built with
+  `docker build -f <its dockerfile> --target <target>` (no target means the last stage) and the
+  FINAL image is scanned. The allowlist is fail-closed and exactly
+  `deployment/docker/hub.Dockerfile` (targets `hub` and `migrator`) and
+  `deployment/docker/postgres.Dockerfile`. The label is the build target, or the Dockerfile stem
+  (`postgres`) when there is none. Services with an identical (Dockerfile, target) build, such as
+  `postgres` and `db-bootstrap`, are one entry. `context` must resolve to the repository root
+  (`../..`), the short `build: <path>` form and any other Dockerfile are errors, and the only
+  accepted build args are `POSTGRES_UID` and `POSTGRES_GID` (ownership only; the scan builds with the
+  Dockerfile defaults), so the scan can never build a different image than the one the script
+  builds. Built images are tagged `sakuraops-image-scan-<label>:local`. A unit test also requires
+  every `FROM` of both Dockerfiles to be digest-pinned (or an earlier stage), so an unpinned
+  base cannot slip in.
 
 Needs docker and network. Without docker only `imagescan plan`, the checker and the unit tests can
 be run (see Local run).
+
+**Two scan modes per image, evaluated as a union.** For every image the gate evaluates (a) the
+direct `grype docker:<image>` report and (b) `grype sbom:<file>` on the syft-json SBOM of the same
+image (`syft scan docker:<image> -o syft-json`, pinned syft; the CycloneDX SBOM is still produced).
+Both are mandatory: a missing report, missing SBOM or missing `sbom-report=`/`syft=` argument is an
+input error (exit 2), never a silent single-mode pass. Findings are united and deduplicated by
+(image, vulnerability id, package, version); if the modes disagree on one finding the stricter view
+is kept (higher severity, union of fix versions). Both reports go through the same validation below,
+including the image identity, and the syft SBOM is verified on its own too (`source.type` image,
+the same identity rules, `descriptor.name` `syft` with the pinned version, at least one artifact), so
+the SBOM that is scanned is provably the SBOM of the image under test. The per-image summary line
+shows both modes: `direct N matches (n HIGH/CRITICAL), sbom M matches (m HIGH/CRITICAL), union u
+distinct HIGH/CRITICAL: f fixable, w unfixed warnings, i ignored`. Reason: grype 0.122.1 direct
+image scans catalogued but did not match the Go standard library embedded in `gosu`, while the SBOM
+scan did (see postgres-image-assessment.md); scanning only one mode left a hole. The root cause
+inside grype is not known; the union is a mitigation of the symptom, not proof that no other
+binary-embedded package is missed by both modes.
 
 Each grype report is validated by `cmd/imagescan` before any policy is applied, so an empty, wrong
 or truncated file cannot pass as a clean scan. A report is rejected when it is not a single JSON
@@ -188,10 +209,13 @@ threshold and the verdict comes from the checker):
 - HIGH or CRITICAL without a fix (including `wont-fix`): printed as `WARNING (unfixed)`, does not
   fail. These stay visible in every run.
 - Lower severities are not evaluated.
-- The summary prints, per image, total matches, fixable failures, unfixed warnings and ignored
-  findings, plus the number of distinct HIGH/CRITICAL advisory ids across all images.
-- Reports in `bin/image-scan/` (artifact `image-scan-reports`, 7 days): grype JSON and CycloneDX
-  SBOM per image. They hold package names, versions and advisory ids only.
+- The summary prints, per image, the matches and HIGH/CRITICAL counts of both modes, the union, fixable
+  failures, unfixed warnings and ignored findings, plus the number of distinct HIGH/CRITICAL advisory
+  ids across all images.
+- Reports in `bin/image-scan/` (artifact `image-scan-reports`, 7 days), per image label:
+  `<label>.grype.json` (direct), `<label>.sbom.grype.json` (SBOM mode), `<label>.syft.json` (the SBOM
+  that was scanned) and `<label>.cdx.json` (CycloneDX). They hold package names, versions and
+  advisory ids only.
 
 Exceptions: only `supply-chain/image-scan-ignore.json`, reviewed in a pull request. The file is
 currently `{"ignores": []}`: no risk has been accepted. Each entry has `id` (advisory id, CVE or
@@ -206,9 +230,9 @@ duplicates. An expired entry fails and no longer suppresses; an entry that match
 finding fails (remove it). There is no severity downgrade and no exit-code override.
 
 Local run (what was and was not run on a host without docker): `go run ./cmd/imagescan plan`,
-`go test ./internal/imagescan/... ./cmd/imagescan/...` and the checker against a grype report of a
-registry image work without docker, e.g. `bin/tools/grype registry:postgres@sha256:<digest> -o json
---file r.json` followed by `go run ./cmd/imagescan -grype-version <v> postgres=r.json,digest=sha256:<digest>`.
+`go test ./internal/imagescan/... ./cmd/imagescan/...` work without docker. The checker needs all
+three files per image: `go run ./cmd/imagescan -grype-version <v> -syft-version <s>
+<label>=direct.json,sbom-report=sbom.grype.json,syft=sbom.syft.json,digest=sha256:<digest>`.
 The build, pull and `docker image inspect` steps in `scripts/image-scan.sh` need docker and are only
 exercised in CI.
 
@@ -222,16 +246,15 @@ without distro fix data show as unfixed and only warn; the build-stage images ar
 
 ## Known limitations
 
-- **Go standard library of `gosu` is not evaluated by the current scan.** An independent variant
-  analysis (2026-11-28, grype 0.122.1, DB built 2026-11-28) found that direct image scans
-  (`registry:`, and very likely `docker:`; CI reported the same 111 HIGH/CRITICAL matches as the
-  registry scan) report zero Go stdlib matches for `/usr/local/bin/gosu` (gosu v1.20.0, built with
-  go1.24.6). Running grype on a syft SBOM of the same image reports 61 distinct Go stdlib advisories
-  (3 Critical, 32 High), fixed upstream only in newer Go releases. The cause of the difference is
-  not verified. Closing the gap (for example scanning from SBOMs) would make the pinned postgres
-  image fail the unchanged policy, because those findings have a Go fix but nothing a SakuraOps
-  change can apply without a rebuilt upstream image. The gate and policy are deliberately unchanged;
-  the decision is pending with the owner. Details and options: [postgres-image-assessment.md](postgres-image-assessment.md).
+- **Direct grype image scans can miss binary-embedded Go standard library packages.** Observed
+  2026-11-28 with grype 0.122.1: the pinned PostgreSQL image's `gosu` (go1.24.6) was catalogued but a
+  direct scan reported zero matches, while `grype sbom:` on a syft SBOM reported 61 distinct Go stdlib
+  advisories. The gate now evaluates the union of both modes (Image scanning), which closes this
+  particular hole. The cause inside grype is unverified, so the same effect could hide other
+  embedded Go binaries in both modes. In the derived PostgreSQL image `gosu` is deleted, so those
+  findings disappear because the binary is gone, not because they are ignored
+  ([postgres-image-assessment.md](postgres-image-assessment.md)). The remaining PostgreSQL findings
+  (Debian packages) are unchanged and still printed as warnings.
 
 ## Coverage and limitations
 

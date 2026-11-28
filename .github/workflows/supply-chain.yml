@@ -57,8 +57,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      # Builds every locally built Compose target, pulls each pinned external digest, downloads the grype
-      # vulnerability database (no cache: always current) and applies the policy.
+      # Builds every locally built Compose image (hub, migrator, derived postgres), pulls each pinned external
+      # digest, downloads the grype vulnerability database (no cache: always current), scans each image directly
+      # and via its syft SBOM, and applies the policy to the union.
       - run: make image-scan
       - name: Upload image reports
         if: ${{ !cancelled() }}
@@ -68,5 +69,6 @@ jobs:
           path: |
             bin/image-scan/*.grype.json
             bin/image-scan/*.cdx.json
+            bin/image-scan/*.syft.json
           retention-days: 7
           if-no-files-found: error

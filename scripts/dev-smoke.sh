@@ -53,6 +53,23 @@ check "hub rootfs is read-only" test "$(insp '{{.HostConfig.ReadonlyRootfs}}' "$
 check "hub drops all capabilities" test "$(insp '{{json .HostConfig.CapDrop}}' "${hub}")" = '["ALL"]'
 check "hub has no-new-privileges" bash -c "docker inspect --format '{{json .HostConfig.SecurityOpt}}' ${hub} | grep -q no-new-privileges:true"
 
+# PostgreSQL hardening: derived image without gosu, non-root, no capabilities at all.
+want_user="${SAKURAOPS_DEV_UID}:${SAKURAOPS_DEV_GID}"
+check "postgres container is configured as ${want_user} (not root)" test "$(insp '{{.Config.User}}' "${pg}")" = "${want_user}"
+check "postgres process uid is not 0 and equals ${SAKURAOPS_DEV_UID}" test "$(docker exec "${pg}" id -u)" = "${SAKURAOPS_DEV_UID}"
+pg_uids="$(docker top "${pg}" -eo pid,uid 2>/dev/null | awk 'NR>1 {print $2}' | sort -u | tr '\n' ' ' || true)"
+check "every process in the postgres container runs as uid ${SAKURAOPS_DEV_UID}" test "${pg_uids}" = "${SAKURAOPS_DEV_UID} "
+check "gosu is absent from the running postgres container" bash -c '! docker exec "$1" test -e /usr/local/bin/gosu && ! docker exec "$1" bash -c "command -v gosu"' _ "${pg}"
+check "postgres has no added capabilities (CapAdd empty)" bash -c 'v="$(docker inspect --format "{{json .HostConfig.CapAdd}}" "$1")"; [[ "$v" == null || "$v" == "[]" ]]' _ "${pg}"
+check "postgres drops all capabilities" test "$(insp '{{json .HostConfig.CapDrop}}' "${pg}")" = '["ALL"]'
+check "postgres has no-new-privileges" bash -c "docker inspect --format '{{json .HostConfig.SecurityOpt}}' ${pg} | grep -q no-new-privileges:true"
+check "postgres process holds no effective capability" bash -c 'docker exec "$1" grep -qx "CapEff:.0000000000000000" /proc/1/status' _ "${pg}"
+check "postgres is not privileged" test "$(insp '{{.HostConfig.Privileged}}' "${pg}")" = false
+check "PGDATA is owned by uid ${SAKURAOPS_DEV_UID} with mode 0700" bash -c '[[ "$(docker exec "$1" bash -c "stat -c \"%u %a\" \"\$PGDATA\"")" == "$2 700" ]]' _ "${pg}" "${SAKURAOPS_DEV_UID}"
+check "postgres password file is owned by the postgres uid, mode 0600" bash -c 'docker cp "$1:/run/secrets/postgres_password" - | tar --numeric-owner -tvf - | grep -q "^-rw------- $2/"' _ "${pg}" "${SAKURAOPS_DEV_UID}"
+check "postgres service uses the locally built derived image" test "$(insp '{{.Config.Image}}' "${pg}")" = sakuraops-dev-postgres:local
+check "db-bootstrap uses the derived postgres image tag" test "$(insp '{{.Config.Image}}' "${boot}")" = sakuraops-dev-postgres:local
+
 # --- Wiring: bootstrap -> migrate -> hub ---
 latest="$(ls "${root}"/db/migrations/*.sql | sed 's#.*/0*\([0-9]*\)_.*#\1#' | sort -n | tail -1)"
 exit_of() { docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$1"; }
