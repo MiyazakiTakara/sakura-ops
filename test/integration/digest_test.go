@@ -15,19 +15,23 @@ var (
 	harnessImageRe = regexp.MustCompile(`(?m)^const pgImage = "(postgres@sha256:[0-9a-f]{64})"\s*$`)
 )
 
-// sameImage extracts the single pinned postgres image from each text and compares them.
+// sameImage extracts the pinned postgres images from each text and compares them. The
+// compose file may use the image in several services (postgres, db-bootstrap); every one
+// must equal the harness image.
 // The error names both values (or what was wrong with finding them).
 func sameImage(compose, harness string) error {
 	c := composeImageRe.FindAllStringSubmatch(compose, -1)
 	h := harnessImageRe.FindAllStringSubmatch(harness, -1)
-	if len(c) != 1 {
-		return fmt.Errorf("compose.dev.yaml: want exactly one pinned postgres image, found %d", len(c))
+	if len(c) == 0 {
+		return fmt.Errorf("compose.dev.yaml: want at least one pinned postgres image, found none")
 	}
 	if len(h) != 1 {
 		return fmt.Errorf("harness_test.go: want exactly one pgImage const with a pinned digest, found %d", len(h))
 	}
-	if c[0][1] != h[0][1] {
-		return fmt.Errorf("postgres digest mismatch: compose.dev.yaml has %q, harness_test.go pgImage has %q", c[0][1], h[0][1])
+	for _, m := range c {
+		if m[1] != h[0][1] {
+			return fmt.Errorf("postgres digest mismatch: compose.dev.yaml has %q, harness_test.go pgImage has %q", m[1], h[0][1])
+		}
 	}
 	return nil
 }
@@ -66,6 +70,12 @@ func TestSameImageDetectsProblems(t *testing.T) {
 	}
 	if sameImage("services: {}\n", harness(a)) == nil {
 		t.Error("missing compose image accepted")
+	}
+	if sameImage(compose(a)+compose(b), harness(a)) == nil {
+		t.Error("one of two differing compose images accepted")
+	}
+	if err := sameImage(compose(a)+compose(a), harness(a)); err != nil {
+		t.Errorf("two equal compose images rejected: %v", err)
 	}
 	if sameImage(compose(a), "package x\n") == nil {
 		t.Error("missing pgImage accepted")
