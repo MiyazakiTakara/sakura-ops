@@ -5,9 +5,12 @@
 		title: string;
 		onclose: () => void;
 		children: Snippet;
+		/** Initial position; defaults suit a bare page. The shell opens it clear of the navigation. */
+		initialX?: number;
+		initialY?: number;
 	}
 
-	let { title, onclose, children }: Props = $props();
+	let { title, onclose, children, initialX = 32, initialY = 96 }: Props = $props();
 
 	const STEP = 16;
 	const MIN_W = 280;
@@ -16,8 +19,10 @@
 	// available area; moving and resizing are then neither possible nor needed.
 	const COMPACT_QUERY = '(max-width: 767.98px)';
 
-	let x = $state(32);
-	let y = $state(96);
+	// svelte-ignore state_referenced_locally
+	let x = $state(initialX);
+	// svelte-ignore state_referenced_locally
+	let y = $state(initialY);
 	let w = $state(640);
 	let h = $state(380);
 	let minimized = $state(false);
@@ -38,14 +43,21 @@
 
 	let titlebar: HTMLElement;
 
-	// xterm consumes Tab for completion, so Tab cannot leave the terminal. Escape is the keyboard
-	// exit (WCAG 2.1.2): focus moves to the title bar, from where Tab and Shift+Tab continue.
-	// It does not close or minimize the window.
+	// xterm consumes Tab for completion, so Tab cannot leave the terminal. Escape and Ctrl+]
+	// (the telnet/SSH escape character) are the keyboard exits (WCAG 2.1.2): focus moves to the
+	// title bar, from where Tab and Shift+Tab continue. Neither closes or minimizes the window.
+	// Escape is expected to be forwarded to a future SSH PTY (issue #26); Ctrl+] stays the exit.
 	function escapeKey(e: KeyboardEvent): void {
-		if (e.key === 'Escape' && e.target !== titlebar) {
+		const exit = e.key === 'Escape' || (e.ctrlKey && !e.altKey && !e.metaKey && e.key === ']');
+		if (exit && e.target !== titlebar) {
 			e.preventDefault();
 			titlebar.focus();
 		}
+	}
+
+	/** Brings a minimized window back and keeps it inside the viewport (called by the shell). */
+	export async function reveal(): Promise<void> {
+		if (minimized) await toggleMinimized();
 	}
 
 	async function toggleMinimized(): Promise<void> {

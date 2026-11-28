@@ -50,3 +50,7 @@ body {
 		transition: none !important;
 	}
 }
+
+a {
+	color: inherit;
+}

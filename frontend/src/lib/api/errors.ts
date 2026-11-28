@@ -6,6 +6,7 @@ import type { components } from './schema';
 export type ApiError = components['schemas']['Error'];
 export type FieldError = components['schemas']['FieldError'];
 export type Health = components['schemas']['Health'];
+export type Readiness = components['schemas']['Readiness'];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -43,6 +44,16 @@ export function isApiError(v: unknown): v is ApiError {
 
 export function isHealth(v: unknown): v is Health {
 	return isRecord(v) && onlyKeys(v, ['status']) && v.status === 'ok';
+}
+
+export function isReadiness(v: unknown): v is Readiness {
+	return (
+		isRecord(v) &&
+		onlyKeys(v, ['status', 'schema_version']) &&
+		v.status === 'ready' &&
+		typeof v.schema_version === 'number' &&
+		Number.isInteger(v.schema_version)
+	);
 }
 
 /** Returns the error envelope, or null when the value does not match the contract. */
