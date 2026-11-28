@@ -5,7 +5,9 @@
 # Fails closed, like proto-breaking.sh:
 #   - BASE_REF that does not resolve to a commit        -> error, exit 1
 #   - any git error while inspecting the base commit     -> error, exit 1
-#   - verified base commit without SPEC_PATH             -> skip (new contract), exit 0
+#   - verified base commit without SPEC_PATH             -> error, exit 1 (CONTRACT_BASE_REQUIRED=1,
+#     the default); skip with exit 0 only when CONTRACT_BASE_REQUIRED=0 is set explicitly (bootstrap
+#     of a brand new contract, local use only; CI never sets it)
 #   - otherwise                                          -> oasdiff breaking, fails on ERR or WARN
 # OASDIFF is the oasdiff command (default "oasdiff"); it is word-split on purpose.
 set -eu
@@ -18,6 +20,7 @@ base=$1
 root=$2
 spec=$3
 OASDIFF=${OASDIFF:-oasdiff}
+required=${CONTRACT_BASE_REQUIRED:-1}
 
 if ! sha=$(git -C "$root" rev-parse --verify --quiet "${base}^{commit}"); then
 	echo "openapi-breaking: ERROR: base ref '$base' does not resolve to a commit (missing ref, shallow clone or git error); refusing to skip" >&2
@@ -33,7 +36,11 @@ if ! listing=$(git -C "$root" ls-tree --name-only "$sha" -- "$spec"); then
 	exit 1
 fi
 if [ -z "$listing" ]; then
-	echo "openapi-breaking: base $base ($sha) has no $spec; new contract, nothing to compare"
+	if [ "$required" != 0 ]; then
+		echo "openapi-breaking: ERROR: base $base ($sha) has no $spec and CONTRACT_BASE_REQUIRED=$required; refusing to skip (set CONTRACT_BASE_REQUIRED=0 only to bootstrap a new contract locally)" >&2
+		exit 1
+	fi
+	echo "openapi-breaking: CONTRACT_BASE_REQUIRED=0: base $base ($sha) has no $spec; new contract, nothing to compare"
 	exit 0
 fi
 if [ ! -f "$root/$spec" ]; then
