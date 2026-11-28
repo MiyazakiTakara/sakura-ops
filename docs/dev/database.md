@@ -106,6 +106,11 @@ lazily, so the hub starts while the database is down.
 Errors use the docs/23 envelope; no DSN or driver text is returned. `/readyz` is a reserved
 path and never falls back to the SPA. `/healthz` stays a pure liveness probe.
 
+## Compose wiring
+
+`deployment/compose/compose.dev.yaml` runs the bootstrap, the migrator and the hub in order with
+a separate secret file per role; see `docs/dev/compose.md` (secret isolation, scenarios).
+
 ## Commands
 
 ```
@@ -126,9 +131,6 @@ password and refused connection, bootstrap hardening of pre-existing roles, and 
 
 ## Not included
 
-- Wiring the hub and migrator into `deployment/compose/compose.dev.yaml` (follow-up after both
-  PRs merge). Docker Compose file secrets are bind mounts that keep the host owner, so that
-  follow-up must decide how the non-root hub reads its URL file.
 - Backups and restore tooling, TLS to PostgreSQL (see Transport security above; the test connections use `sslmode=disable`
   on loopback), connection poolers, row-level security.
 - Any table other than `instance_settings`; the rest of docs/22-data-model.md arrives with

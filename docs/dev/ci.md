@@ -22,7 +22,8 @@ branch filter or the absence of `secrets.*` references, which remain review item
 | Contracts (`contracts.yml`) | `Generated contracts, lint, breaking, contract tests` | OpenAPI/proto generation drift, buf lint, `proto-breaking`, `openapi-breaking`, Go and Vitest contract tests, the OpenAPI document validation, breaking-script tests | `make contracts-check contracts-test proto-breaking-test openapi-breaking-test` |
 | E2E (`e2e.yml`) | `Playwright (Chromium)` | browser tests against the embedded server | `make e2e-install e2e` |
 | Supply chain (`supply-chain.yml`) | `SBOM, licence policy, vulnerability audit` | CycloneDX SBOMs, licence policy, govulncheck, npm audit | `make supply-chain` |
-| Compose (`compose.yml`) | `Compose clean start` | clean start of the development stack and hardening smoke test (docker) | `make dev-up dev-smoke dev-down` |
+| Compose (`compose.yml`) | `Compose clean start` | clean start of the development stack (bootstrap, migrator, hub) and the smoke test: hardening, secret isolation, DB permissions (docker) | `make dev-up dev-smoke dev-down` |
+| Compose | `Compose DB scenarios` | restart on an existing volume, database down, schema behind, migration failure (docker) | `make dev-scenarios` |
 | Database (`db.yml`) | `Migrations and store` | sqlc drift, unit tests, integration tests against a throwaway PostgreSQL (docker) | `make sqlc-check test-integration` |
 
 `make check` bundles the Go, web, secret and workflow checks (needs network for `vuln`); the other
