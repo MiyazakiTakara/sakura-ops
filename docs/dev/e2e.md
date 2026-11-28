@@ -32,6 +32,7 @@ failure with 7 days retention. They show the fictional spike page only.
 | `editor.spec.ts` | CodeMirror shows the YAML, is editable, keyboard typing and undo |
 | `layout.spec.ts` | 360/768/1280/1920 px: no global horizontal scroll, window fits, phone (< 768 px) uses the full area; viewport shrink pulls the window back; 200% zoom |
 | `keyboard.spec.ts` | Tab order (editor, title bar, Minimize, Close, terminal), Escape leaves the terminal and never closes the window, Enter/Space on controls |
+| `shell.spec.ts` | UX shell (docs/dev/ux-shell.md): landmarks, nav and `aria-current`, placeholders, skip link, keyboard-only terminal open/exit/close and focus restore, session survives routing, real and mocked `/readyz` states (ready, schema_ahead/outdated, db_unavailable, loading, stale after failure, off-contract body), GET only, 360/768/1280/1920 px, Menu button, touch targets, reduced motion, no console/CSP problems, axe on all shell routes |
 | `a11y.spec.ts` | axe-core (WCAG 2.0/2.1/2.2 A and AA plus best-practice rules) on `/` and `/spike/terminal` |
 
 Terminal output is read from the rendered DOM rows. No test hooks exist in production code.

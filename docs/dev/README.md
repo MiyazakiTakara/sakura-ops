@@ -45,7 +45,7 @@ bin/sakuraops-server -listen 127.0.0.1:8080
 curl -s http://127.0.0.1:8080/healthz        # {"status":"ok"}
 ```
 
-Open `http://127.0.0.1:8080/` for the placeholder page and
+Open `http://127.0.0.1:8080/` for the UX shell prototype (see `ux-shell.md`) and
 `http://127.0.0.1:8080/spike/terminal` for the technical spike (floating local-echo
 terminal plus a CodeMirror YAML editor). The spike is not linked from any navigation, never
 calls a backend and executes nothing.
@@ -86,6 +86,7 @@ Known limits are listed in `docs/dev/spike-results.md` ("Limitations assigned to
 
 [`ci.md`](ci.md) (workflows, required checks), [`contracts.md`](contracts.md),
 [`database.md`](database.md), [`compose.md`](compose.md), [`e2e.md`](e2e.md),
+[`ux-shell.md`](ux-shell.md) (UX shell prototype),
 [`supply-chain.md`](supply-chain.md), [`spike-results.md`](spike-results.md).
 
 ## Not here yet (P02 and later)
