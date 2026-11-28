@@ -1,0 +1,58 @@
+{
+ "matches": [
+  {
+   "vulnerability": {
+    "id": "CVE-2026-74860",
+    "severity": "High",
+    "fix": {
+     "versions": [],
+     "state": "not-fixed"
+    }
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "CVE-2026-74860"
+    }
+   ],
+   "artifact": {
+    "name": "libxml2",
+    "version": "2.12.7+dfsg+really2.9.14-2.1+deb13u3"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2011-3389",
+    "severity": "Negligible",
+    "fix": {
+     "versions": [],
+     "state": "not-fixed"
+    }
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "CVE-2011-3389"
+    }
+   ],
+   "artifact": {
+    "name": "libgnutls30t64",
+    "version": "3.8.9-3+deb13u4"
+   }
+  }
+ ],
+ "source": {
+  "type": "image",
+  "target": {
+   "userInput": "postgres@sha256:64c8b0d31e4ab6ea665e8426ea406a94bf52de3c05b3a4a8bf713704eefa9328",
+   "imageID": "sha256:71351f08f4be0e8675d0c8c35c7613b37a8e247e1a346e87ae06592cfa6e2b63",
+   "manifestDigest": "sha256:32f5fdbf4d27ebe0d4552313126a593400f40b21bff207e43617b2305838bce3",
+   "repoDigests": [
+    "index.docker.io/library/postgres@sha256:64c8b0d31e4ab6ea665e8426ea406a94bf52de3c05b3a4a8bf713704eefa9328"
+   ],
+   "tags": []
+  }
+ },
+ "descriptor": {
+  "name": "grype",
+  "version": "0.122.1"
+ }
+}

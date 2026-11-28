@@ -22,6 +22,7 @@ branch filter or the absence of `secrets.*` references, which remain review item
 | Contracts (`contracts.yml`) | `Generated contracts, lint, breaking, contract tests` | OpenAPI/proto generation drift, buf lint, `proto-breaking`, `openapi-breaking`, Go and Vitest contract tests, the OpenAPI document validation, breaking-script tests | `make contracts-check contracts-test proto-breaking-test openapi-breaking-test` |
 | E2E (`e2e.yml`) | `Playwright (Chromium)` | browser tests against the embedded server | `make e2e-install e2e` |
 | Supply chain (`supply-chain.yml`) | `SBOM, licence policy, vulnerability audit` | CycloneDX SBOMs, licence policy, govulncheck, npm audit | `make supply-chain` |
+| Supply chain | `Container image vulnerability scan` | scans every image of `compose.dev.yaml` (deduplicated pinned externals, locally built targets) with grype after validating each report; fails on fixable HIGH/CRITICAL; uploads `image-scan-reports` | `make image-scan` |
 | Compose (`compose.yml`) | `Compose clean start` | clean start of the development stack (bootstrap, migrator, hub) and the smoke test: hardening, secret isolation, DB permissions (docker) | `make dev-up dev-smoke dev-down` |
 | Compose | `Compose DB scenarios` | restart on an existing volume, database down, schema behind, migration failure (docker) | `make dev-scenarios` |
 | Database (`db.yml`) | `Migrations and store` | sqlc drift, unit tests, integration tests against a throwaway PostgreSQL (docker) | `make sqlc-check test-integration` |
@@ -44,6 +45,8 @@ The owner should mark these exact job names as required on `v2/native-agent-blue
 8. `SBOM, licence policy, vulnerability audit`
 9. `Compose clean start`
 10. `Migrations and store`
+11. `Container image vulnerability scan`
+12. `Compose DB scenarios`
 
 ## Notes
 
@@ -62,6 +65,6 @@ The owner should mark these exact job names as required on `v2/native-agent-blue
 
 ## Not covered yet
 
-- Container image vulnerability scanning: separate follow-up.
+- Image scanning covers the images listed in `compose.dev.yaml` only; see docs/dev/supply-chain.md.
 - dependency-review: the repository dependency graph is disabled; tracked in #24.
 - Release signing and provenance: #30 and #36. There is no release workflow.
