@@ -36,8 +36,8 @@ Start order, enforced with `depends_on` conditions: `postgres` (`service_healthy
 
 | Service | Image | Notes |
 | --- | --- | --- |
-| `postgres` | `postgres:18-trixie` pinned by digest (PostgreSQL 18) | `POSTGRES_PASSWORD_FILE` from the admin secret, named volume `pgdata`, `pg_isready` health check, capabilities limited to those the image entrypoint needs, `no-new-privileges` |
-| `db-bootstrap` | same pinned postgres image (ships `psql`) | runs `db/bootstrap/roles.sql` once per `up` with the admin credential; idempotent, resets the two role passwords; read-only rootfs, `cap_drop: ALL`, non-root |
+| `postgres` | `deployment/docker/postgres.Dockerfile`, built locally: `FROM postgres:18-trixie` pinned by digest, `/usr/local/bin/gosu` removed, `postgres` user renumbered to the developer uid:gid | runs as `SAKURAOPS_DEV_UID:GID` (never root), `POSTGRES_PASSWORD_FILE` from the admin secret, named volume `pgdata`, `pg_isready` health check, `cap_drop: ALL` with no `cap_add`, `no-new-privileges` |
+| `db-bootstrap` | same derived postgres image (ships `psql`) | runs `db/bootstrap/roles.sql` once per `up` with the admin credential; idempotent, resets the two role passwords; read-only rootfs, `cap_drop: ALL`, non-root |
 | `migrate` | `hub.Dockerfile` target `migrator` (distroless, only `sakuraops-migrate`) | `sakuraops-migrate -database-url-file ... up` with the migrator DSN only; exits 0 when done; read-only rootfs, `cap_drop: ALL`, non-root |
 | `hub` | `hub.Dockerfile` target `hub` | Node 22 builds the SPA, Go 1.27.4 builds a static `CGO_ENABLED=0 -trimpath` binary with the embedded UI, runtime is `distroless/static-debian13:nonroot` (no shell); started with `-database-url-file` for the app DSN only |
 
@@ -64,9 +64,26 @@ Outside Swarm, Compose bind-mounts file secrets with the host owner and mode and
 the mode cannot be loosened to make a file readable. Instead `hub`, `migrate` and
 `db-bootstrap` run as the invoking host user (`SAKURAOPS_DEV_UID`/`SAKURAOPS_DEV_GID`, filled
 in by `make` from `id -u`/`id -g`; `make dev-up` refuses uid 0). They are still non-root, but
-not uid 65532 as in the production image. `postgres` reads its password as root in the image
-entrypoint, then drops to the `postgres` user. Running `docker compose` by hand needs those
-two variables set. `SAKURAOPS_DEV_SECRETS_DIR` points the stack at another secrets directory
+not uid 65532 as in the production image. `postgres` runs the same way: the official image
+starts as root only to chown PGDATA and then drops privileges with `gosu`, which would need
+`CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETUID` and `SETGID`. The derived image
+(`deployment/docker/postgres.Dockerfile`) removes `gosu`, and `make dev-up` builds it with
+`POSTGRES_UID`/`POSTGRES_GID` set to the developer uid:gid, which (1) renumbers the image's `postgres`
+user so `initdb` finds a passwd entry for the running uid and (2) makes `/var/lib/postgresql` and
+`/var/run/postgresql` owned by that uid in the image, so a fresh named volume (which takes
+ownership from the image directory) is writable without root at runtime. The container then runs
+with `user: uid:gid`, `cap_drop: [ALL]`, no `cap_add`, and reads its 0600 secret as its own
+uid. Running `docker compose` by hand needs those two variables set.
+
+**Existing dev volumes:** a `pgdata` volume created by the previous setup is owned by uid 999
+(the image's old `postgres` uid) and is not accessible to the developer uid, so `postgres` fails
+to start on it (permission denied on the data directory). Run `make dev-clean CONFIRM=1` once; this
+deletes the development database (disposable by definition, nothing is migrated). A
+non-destructive chown would need a root container and is deliberately not provided. The same applies
+if you change `SAKURAOPS_DEV_UID`/`GID` later. The image tag `sakuraops-dev-postgres:local` is
+per uid: two users sharing one Docker daemon overwrite each other's build (`make dev-up` always
+rebuilds, so the last one wins). The image scan builds with the Dockerfile defaults (1000:1000);
+the ownership args do not change package content. `SAKURAOPS_DEV_SECRETS_DIR` points the stack at another secrets directory
 (used by `make dev-scenarios`).
 
 ## Database bootstrap assumptions
@@ -106,6 +123,11 @@ covered by the integration tests (`make test-integration`).
   from the postgres container and expects it to fail.
 - The hub is published only on `127.0.0.1:8080`, through a separate `edge` network. It is
   attached to `backend` as well, to reach postgres.
+- Postgres container: configured user is `SAKURAOPS_DEV_UID:GID` and `id -u` inside equals it (not 0),
+  every process runs as that uid, `/usr/local/bin/gosu` does not exist, `CapAdd` is empty, `CapDrop`
+  is `["ALL"]`, effective capabilities of PID 1 are zero, `no-new-privileges`, not privileged, PGDATA
+  is owned by that uid with mode 0700 and the password file is 0600 owned by it. `make dev-scenarios`
+  repeats the uid, gosu and capability check after a fresh start and after a restart on the volume.
 - Hub container: non-root user, `read_only: true`, `cap_drop: [ALL]`,
   `no-new-privileges:true`, health check through the binary's own `-healthcheck` mode
   (`GET /healthz`, 3 s timeout, exit 0 or 1) because the image has no curl or shell.

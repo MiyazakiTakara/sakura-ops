@@ -11,35 +11,42 @@ import (
 // postgres digest bump in only one place is caught without Docker.
 
 var (
-	composeImageRe = regexp.MustCompile(`(?m)^\s*image:\s*(postgres@sha256:[0-9a-f]{64})\s*$`)
+	fromImageRe    = regexp.MustCompile(`(?m)^FROM\s+(postgres@sha256:[0-9a-f]{64})\s*$`)
 	harnessImageRe = regexp.MustCompile(`(?m)^const pgImage = "(postgres@sha256:[0-9a-f]{64})"\s*$`)
 )
 
-// sameImage extracts the pinned postgres images from each text and compares them. The
-// compose file may use the image in several services (postgres, db-bootstrap); every one
-// must equal the harness image.
+// sameImage extracts the pinned postgres base image of the derived Dockerfile
+// (deployment/docker/postgres.Dockerfile; Compose builds it, no external postgres image is
+// referenced) and compares it with the harness image.
 // The error names both values (or what was wrong with finding them).
 func sameImage(compose, harness string) error {
-	c := composeImageRe.FindAllStringSubmatch(compose, -1)
+	c := fromImageRe.FindAllStringSubmatch(compose, -1)
 	h := harnessImageRe.FindAllStringSubmatch(harness, -1)
 	if len(c) == 0 {
-		return fmt.Errorf("compose.dev.yaml: want at least one pinned postgres image, found none")
+		return fmt.Errorf("postgres.Dockerfile: want at least one pinned postgres FROM, found none")
 	}
 	if len(h) != 1 {
 		return fmt.Errorf("harness_test.go: want exactly one pgImage const with a pinned digest, found %d", len(h))
 	}
 	for _, m := range c {
 		if m[1] != h[0][1] {
-			return fmt.Errorf("postgres digest mismatch: compose.dev.yaml has %q, harness_test.go pgImage has %q", m[1], h[0][1])
+			return fmt.Errorf("postgres digest mismatch: postgres.Dockerfile has %q, harness_test.go pgImage has %q", m[1], h[0][1])
 		}
 	}
 	return nil
 }
 
 func TestPostgresDigestMatchesCompose(t *testing.T) {
-	compose, err := os.ReadFile("../../deployment/compose/compose.dev.yaml")
+	compose, err := os.ReadFile("../../deployment/docker/postgres.Dockerfile")
 	if err != nil {
 		t.Fatal(err)
+	}
+	yml, err := os.ReadFile("../../deployment/compose/compose.dev.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexp.MustCompile(`(?m)^\s*image:\s*postgres[:@]`).Match(yml) {
+		t.Fatal("compose.dev.yaml references an external postgres image; it must use the derived image")
 	}
 	harness, err := os.ReadFile("harness_test.go")
 	if err != nil {
@@ -53,7 +60,7 @@ func TestPostgresDigestMatchesCompose(t *testing.T) {
 func TestSameImageDetectsProblems(t *testing.T) {
 	a := "postgres@sha256:" + fmt.Sprintf("%064d", 1)
 	b := "postgres@sha256:" + fmt.Sprintf("%064d", 2)
-	compose := func(img string) string { return "services:\n  postgres:\n    image: " + img + "\n" }
+	compose := func(img string) string { return "# c\nFROM " + img + "\nUSER postgres\n" }
 	harness := func(img string) string { return "package x\n\nconst pgImage = \"" + img + "\"\n" }
 
 	if err := sameImage(compose(a), harness(a)); err != nil {
@@ -68,7 +75,7 @@ func TestSameImageDetectsProblems(t *testing.T) {
 			t.Errorf("error %q does not name %s", err, want)
 		}
 	}
-	if sameImage("services: {}\n", harness(a)) == nil {
+	if sameImage("USER postgres\n", harness(a)) == nil {
 		t.Error("missing compose image accepted")
 	}
 	if sameImage(compose(a)+compose(b), harness(a)) == nil {

@@ -1,8 +1,23 @@
 # PostgreSQL image assessment (2026-11-28)
 
-Status: **assessment only. No risk accepted, no exceptions added (`supply-chain/image-scan-ignore.json`
-stays empty), owner decision pending, review date 2026-12-28.** Counts are scanner output, not
+Status: **assessment of 2026-11-28 plus a follow-up (below): the Compose stack now uses a derived
+image without `gosu` and the gate scans the union of direct and SBOM-mode results. No risk accepted,
+no exceptions added (`supply-chain/image-scan-ignore.json` stays empty), review date 2026-12-28.** Counts are scanner output, not
 verified exploitability. Linked from docs/dev/supply-chain.md (Image scanning, Known limitations).
+
+## Follow-up: derived image without gosu
+
+`deployment/docker/postgres.Dockerfile` is `FROM` the same pinned digest, deletes
+`/usr/local/bin/gosu` and runs as non-root (the `postgres` user renumbered to the developer
+uid:gid, no `cap_add`). The official entrypoint calls `gosu` only when started as root, which
+SakuraOps never does. The Go stdlib findings below therefore **disappear because the binary is not in
+the image**, not because of an ignore entry or a policy change. Everything else in this document, the
+Debian package findings (OpenSSL, libxml2, glibc and so on), is unchanged in the derived image and is
+still printed as `WARNING (unfixed)` on every run; the derived image adds no package. The scan now
+evaluates the union of direct and SBOM-mode results for every image, so findings that only the SBOM
+mode sees (in this image or in hub and migrator) are evaluated too. The tables below are the
+pre-change measurements of the official image and are kept as the baseline; the numbers for the derived
+image are in the CI log of the PR that introduced it, not repeated here.
 
 ## Method
 
@@ -54,7 +69,7 @@ the container entrypoint; **tooling** = present in the image but not used by ser
 
 No findings in the PostgreSQL server package or libpq themselves in registry mode.
 
-## Go stdlib in gosu (not seen by the gate)
+## Go stdlib in gosu (not seen by the gate before the follow-up; binary now removed)
 
 gosu v1.20.0 (go1.24.6) is in every variant. Registry mode reports zero Go matches; the SBOM mode
 reports 61 distinct Go stdlib advisories (3 Critical, 32 High, 24 Medium, 2 Low), fixed only in
@@ -89,9 +104,9 @@ with newer gosu and Go.
    availability may differ; Debian is the reference platform for upstream testing. Lower counts alone
    are not sufficient reason; for a greenfield database the collation concern is smaller.
 4. **bookworm:** not recommended on exposure grounds.
-5. **Go stdlib gap:** decide whether the gate should evaluate it. Doing so would fail the unchanged
-   policy on every variant until upstream rebuilds with newer Go. Do not self-build the official
-   image without owner approval.
+5. **Go stdlib gap:** resolved for this stack by removing `gosu` in a derived image (a one-line
+   deletion of a binary the non-root start never calls; no rebuild of PostgreSQL) and scanning the
+   union of both modes. Self-building PostgreSQL itself remains out of scope.
 
 ## Not determined
 

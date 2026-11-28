@@ -2,7 +2,8 @@
 // file. Policy: HIGH or CRITICAL findings with a fix available fail; unfixed
 // HIGH or CRITICAL findings are warnings. Ignore entries need an id, image,
 // package, reason, reviewer and an unexpired date; unused and expired entries
-// fail. Nothing here lowers severities or short-circuits a failure.
+// fail. Findings of the direct and the SBOM-mode scan of an image are united.
+// Nothing here lowers severities or short-circuits a failure.
 package imagescan
 
 import (
@@ -181,34 +182,9 @@ func ParseReport(image string, b []byte, want Expect) (*Report, error) {
 		return fail("report source is missing or not an image")
 	}
 	t := r.Source.Target
-	identity := ""
-	if want.ImageID != "" {
-		// The classic Docker image store reports the config digest as the image
-		// ID (grype: imageID). With the containerd image store (default on
-		// current Docker, e.g. GitHub runners) `docker image inspect .Id` is the
-		// image index digest, which grype lists in repoDigests as
-		// "<name>@<digest>". Both are exact SHA-256 identities of the same image.
-		ok := t.ImageID == want.ImageID
-		for _, d := range t.RepoDigests {
-			if strings.HasSuffix(d, "@"+want.ImageID) {
-				ok = true
-			}
-		}
-		if !ok {
-			return fail("source image ID %q (repo digests %v) does not match expected %q", t.ImageID, t.RepoDigests, want.ImageID)
-		}
-		identity = want.ImageID
-	} else {
-		ok := t.ManifestDigest == want.Digest
-		for _, d := range t.RepoDigests {
-			if strings.HasSuffix(d, "@"+want.Digest) {
-				ok = true
-			}
-		}
-		if !ok {
-			return fail("source does not carry expected digest %s", want.Digest)
-		}
-		identity = want.Digest
+	identity, err := matchIdentity(t.ImageID, t.ManifestDigest, t.RepoDigests, want)
+	if err != nil {
+		return fail("%v", err)
 	}
 	if r.Matches == nil {
 		return fail("report has no matches array (null or missing)")
@@ -234,6 +210,153 @@ func ParseReport(image string, b []byte, want Expect) (*Report, error) {
 		rep.Findings = append(rep.Findings, f)
 	}
 	return rep, nil
+}
+
+// matchIdentity proves that a source (grype report or syft SBOM) describes the
+// expected image and returns the identity that was matched.
+func matchIdentity(imageID, manifestDigest string, repoDigests []string, want Expect) (string, error) {
+	if want.ImageID != "" {
+		// The classic Docker image store reports the config digest as the image
+		// ID (grype: imageID). With the containerd image store (default on
+		// current Docker, e.g. GitHub runners) `docker image inspect .Id` is the
+		// image index digest, which grype lists in repoDigests as
+		// "<name>@<digest>". Both are exact SHA-256 identities of the same image.
+		ok := imageID == want.ImageID
+		for _, d := range repoDigests {
+			if strings.HasSuffix(d, "@"+want.ImageID) {
+				ok = true
+			}
+		}
+		if !ok {
+			return "", fmt.Errorf("source image ID %q (repo digests %v) does not match expected %q", imageID, repoDigests, want.ImageID)
+		}
+		return want.ImageID, nil
+	}
+	ok := manifestDigest == want.Digest
+	for _, d := range repoDigests {
+		if strings.HasSuffix(d, "@"+want.Digest) {
+			ok = true
+		}
+	}
+	if !ok {
+		return "", fmt.Errorf("source does not carry expected digest %s", want.Digest)
+	}
+	return want.Digest, nil
+}
+
+type syftSBOM struct {
+	Artifacts *[]json.RawMessage `json:"artifacts"`
+	Source    *struct {
+		Type     string `json:"type"`
+		Metadata *struct {
+			ImageID        string   `json:"imageID"`
+			ManifestDigest string   `json:"manifestDigest"`
+			RepoDigests    []string `json:"repoDigests"`
+		} `json:"metadata"`
+	} `json:"source"`
+	Descriptor *struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"descriptor"`
+}
+
+// VerifySBOM checks that a syft-json SBOM was produced by the pinned syft from
+// the expected image (same identity rules as ParseReport) and is not empty.
+// The SBOM is the input of the sbom-mode grype scan, so its own source identity
+// is verified independently of what grype copies into its report.
+func VerifySBOM(image string, b []byte, want Expect, syftVersion string) error {
+	fail := func(format string, a ...any) error {
+		return fmt.Errorf("%s: syft SBOM: %s", image, fmt.Sprintf(format, a...))
+	}
+	if (want.Digest == "") == (want.ImageID == "") {
+		return fail("exactly one of expected digest or expected image ID is required")
+	}
+	if syftVersion == "" {
+		return fail("expected syft version is required")
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	var s syftSBOM
+	if err := dec.Decode(&s); err != nil {
+		return fail("parse: %v", err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return fail("trailing data")
+	}
+	if s.Descriptor == nil || s.Descriptor.Name != "syft" {
+		return fail("not a syft report (descriptor.name)")
+	}
+	if s.Descriptor.Version != syftVersion {
+		return fail("syft version %q, want %q", s.Descriptor.Version, syftVersion)
+	}
+	if s.Source == nil || s.Source.Type != "image" || s.Source.Metadata == nil {
+		return fail("source is missing or not an image")
+	}
+	m := s.Source.Metadata
+	if _, err := matchIdentity(m.ImageID, m.ManifestDigest, m.RepoDigests, want); err != nil {
+		return fail("%v", err)
+	}
+	if s.Artifacts == nil || len(*s.Artifacts) == 0 {
+		return fail("no artifacts (null, missing or empty); refusing to scan an empty SBOM")
+	}
+	return nil
+}
+
+// ImageScan is both evaluated modes of one image: the direct image scan and
+// the scan of the syft SBOM of the same image.
+type ImageScan struct {
+	Image    string
+	Direct   *Report
+	SBOM     *Report
+	Findings []Finding // union, deduplicated by (image, id, package, version)
+}
+
+// Combine builds the union of the direct and the SBOM-mode report. Both are
+// mandatory: a missing mode is an error, never a silent single-mode pass.
+// Findings present in both modes are counted once; if the modes disagree the
+// stricter view wins (higher severity, union of fix versions and related ids).
+func Combine(image string, direct, sbom *Report) (*ImageScan, error) {
+	if direct == nil {
+		return nil, fmt.Errorf("%s: direct image report is missing", image)
+	}
+	if sbom == nil {
+		return nil, fmt.Errorf("%s: SBOM-mode report is missing", image)
+	}
+	if direct.Image != image || sbom.Image != image || direct.Identity != sbom.Identity {
+		return nil, fmt.Errorf("%s: direct (%s %s) and SBOM-mode (%s %s) reports do not describe the same image",
+			image, direct.Image, direct.Identity, sbom.Image, sbom.Identity)
+	}
+	type key struct{ id, pkg, ver string }
+	idx := map[key]int{}
+	sc := &ImageScan{Image: image, Direct: direct, SBOM: sbom}
+	for _, f := range append(append([]Finding{}, direct.Findings...), sbom.Findings...) {
+		k := key{f.ID, f.Package, f.Version}
+		i, dup := idx[k]
+		if !dup {
+			idx[k] = len(sc.Findings)
+			sc.Findings = append(sc.Findings, f)
+			continue
+		}
+		e := &sc.Findings[i]
+		if f.Severity == "CRITICAL" {
+			e.Severity = "CRITICAL"
+		}
+		e.Fixed = appendMissing(e.Fixed, f.Fixed)
+		e.Related = appendMissing(e.Related, f.Related)
+	}
+	return sc, nil
+}
+
+func appendMissing(dst, src []string) []string {
+	for _, s := range src {
+		found := false
+		for _, d := range dst {
+			found = found || d == s
+		}
+		if !found {
+			dst = append(dst, s)
+		}
+	}
+	return dst
 }
 
 // Result is the outcome of Evaluate.
@@ -311,20 +434,25 @@ func Evaluate(findings []Finding, ign *IgnoreFile, now time.Time) Result {
 
 // ImageSummary counts findings of one image after policy evaluation.
 type ImageSummary struct {
-	Image      string
-	Matches    int // all matches, any severity
-	Fixable    int
-	Warnings   int
-	Suppressed int
+	Image         string
+	DirectMatches int // all matches of the direct image scan, any severity
+	SBOMMatches   int // all matches of the SBOM-mode scan, any severity
+	DirectHigh    int // HIGH/CRITICAL findings per mode, before deduplication
+	SBOMHigh      int
+	UnionHigh     int // distinct (id, package, version) HIGH/CRITICAL findings
+	Fixable       int
+	Warnings      int
+	Suppressed    int
 }
 
-// Summarize returns per-image counts (in report order) and the number of
+// Summarize returns per-image counts (in scan order) and the number of
 // distinct advisory ids among all HIGH/CRITICAL findings, ignored or not.
-func Summarize(reports []*Report, res Result) (perImage []ImageSummary, distinct int) {
+func Summarize(scans []*ImageScan, res Result) (perImage []ImageSummary, distinct int) {
 	idx := map[string]int{}
-	for _, r := range reports {
-		idx[r.Image] = len(perImage)
-		perImage = append(perImage, ImageSummary{Image: r.Image, Matches: r.Matches})
+	for _, sc := range scans {
+		idx[sc.Image] = len(perImage)
+		perImage = append(perImage, ImageSummary{Image: sc.Image, DirectMatches: sc.Direct.Matches, SBOMMatches: sc.SBOM.Matches,
+			DirectHigh: len(sc.Direct.Findings), SBOMHigh: len(sc.SBOM.Findings), UnionHigh: len(sc.Findings)})
 	}
 	ids := map[string]bool{}
 	count := func(fs []Finding, add func(*ImageSummary)) {
