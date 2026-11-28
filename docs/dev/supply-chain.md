@@ -12,6 +12,7 @@ here runs on pull requests only (`.github/workflows/supply-chain.yml`) and local
 | `make license-check` | Runs `sbom`, then `cmd/licensecheck` against `supply-chain/license-policy.json`. |
 | `make deps-audit` | `govulncheck` (`make vuln`) plus `npm audit` on the lockfile. |
 | `make supply-chain` | `license-check` and `deps-audit`. |
+| `make image-scan` | Builds the hub image and scans it plus the pinned postgres image (see Image scanning). Not part of `supply-chain`: needs docker. |
 
 `make supply-chain` needs network (module cache, npm registry, Go and npm advisory databases) and
 `make web-install` done beforehand (the `build` step needs the frontend dependencies).
@@ -136,6 +137,46 @@ get a reviewed exception.
   repository setting for the owner; tracked in #24. Until then, the licence policy over the SBOM,
   `npm audit` and govulncheck above are the enforced checks.
 
+## Image scanning
+
+`make image-scan` (CI job `Container image vulnerability scan`, `scripts/image-scan.sh`) builds the
+hub image from `deployment/docker/hub.Dockerfile` (the Dockerfile Compose uses, local tag
+`sakuraops-hub:image-scan-local`, override with `IMAGE_TAG`), pulls the PostgreSQL image pinned by
+digest in `deployment/compose/compose.dev.yaml` (the digest is read from that file, so the scan
+cannot drift from what Compose runs) and scans both with grype. Needs docker and network.
+
+Scanner: grype 0.122.1, installed by `scripts/install-grype.sh` with a pinned SHA-256 of the release
+archive (same pattern as syft and gitleaks; no `latest`, no `curl | sh`). Grype was chosen over
+Trivy because it is from the same project as the already pinned syft, ships as one static binary,
+and emits JSON with explicit fix versions and state, which `cmd/imagescan` evaluates. The
+vulnerability database is downloaded at run time (not cached, so results are current) and is not
+pinned: a new advisory can fail a PR that touched nothing, which is the intent. The database is large (about 3.6 GB unpacked at v0.122.1) and its first import can take
+several minutes on a slow or loaded machine; the CI job has a 30 minute timeout.
+
+Policy (`internal/imagescan`, `cmd/imagescan`, unit tested; grype itself is run without a failure
+threshold and the verdict comes from the checker):
+
+- HIGH or CRITICAL with a fix available: **fail**.
+- HIGH or CRITICAL without a fix: printed as `WARNING (unfixed)`, does not fail.
+- Lower severities are not evaluated.
+- Reports in `bin/image-scan/` (artifact `image-scan-reports`, 7 days): grype JSON and CycloneDX
+  SBOM per image. They hold package names, versions and advisory ids only.
+
+Exceptions: only `supply-chain/image-scan-ignore.json`, reviewed in a pull request. Each entry
+has `id` (advisory id, CVE or GHSA, matched against the finding and its related ids), `image`
+(`hub` or `postgres`), `package` (exact name), `reason`, `reviewer` and `expires` (`YYYY-MM-DD`,
+valid through that day). No wildcards, unknown fields or duplicates. An expired entry fails and
+no longer suppresses; an entry that matches no HIGH/CRITICAL finding fails (remove it). Entries
+are per image and package, so a fix elsewhere is not hidden. There is no severity downgrade and no
+exit-code override.
+
+Coverage: OS packages and language packages found by syft in the image layers, including base
+image layers (node and golang stages are build-only and not in the final hub image; the final hub
+image is distroless static plus the Go binary). Limits: only these two images; the final image
+has no package manager database for the Go binary beyond embedded module info; grype matches
+against advisory data and can produce false positives or miss unpublished issues; vulnerabilities
+without distro fix data show as unfixed and only warn; the build-stage images are not scanned.
+
 ## Coverage and limitations
 
 Covered:
@@ -151,8 +192,7 @@ Not covered:
   shipped, not in the SBOMs, no licence scan. Scanning it is a follow-up if it ever ships.
 - Other OS and architecture builds. The binary SBOM describes the linux/amd64 build only, and npm
   optional packages for other platforms are in the lockfile but not installed, so not scanned.
-- Container base images and system packages: no images exist yet; tracked separately, to be added
-  with the Compose and Docker images.
+- Container images other than the hub image and the pinned postgres image (see Image scanning).
 - Accuracy of licence data: it depends on package metadata and on syft's `LICENSE` detection for
   Go modules; the policy does not prove the identifier is correct.
 - MPL-2.0 modification checks (manual review, see above).
@@ -163,9 +203,7 @@ Not covered:
 
 - Release signing, provenance and attestations of release artefacts: NEXT-024 and NEXT-046,
   docs/19-release-plan.md.
-- Container image scanning (OS packages, base image licences and CVEs): there are no images yet.
-  It must be added together with the Compose and Docker images (follow-up, to be tracked with
-  that work).
+- Container image licence checks (only vulnerabilities are scanned, see Image scanning).
 - Reading and legally reviewing the licence texts of the transitive tree. The policy trusts the
   SPDX identifier that the package metadata or syft's `LICENSE` detection reports; it does not
   prove that identifier is correct.

@@ -3,7 +3,7 @@ SYFT      := bin/tools/syft
 SBOM_DIR  := bin/sbom
 SBOMS     := $(SBOM_DIR)/go.cdx.json $(SBOM_DIR)/npm-prod.cdx.json $(SBOM_DIR)/npm-dev.cdx.json $(SBOM_DIR)/server-binary.cdx.json
 
-.PHONY: sbom license-check deps-audit supply-chain
+.PHONY: sbom license-check deps-audit supply-chain image-scan
 
 ## sbom: CycloneDX SBOMs for Go, npm (prod and dev) and the built server binary, in bin/sbom/.
 sbom: build
@@ -21,3 +21,10 @@ deps-audit: vuln
 
 ## supply-chain: SBOM, licence policy and vulnerability audit.
 supply-chain: license-check deps-audit
+
+## image-scan: build the hub image, scan it and the pinned postgres image with grype (needs docker, network).
+## Fails on HIGH/CRITICAL with a fix, warns on unfixed ones; exceptions only via supply-chain/image-scan-ignore.json.
+image-scan:
+	./scripts/install-syft.sh
+	./scripts/install-grype.sh
+	GO='$(GO)' ./scripts/image-scan.sh
