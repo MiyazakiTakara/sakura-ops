@@ -57,11 +57,22 @@ no_secret_in() { # text-file ...: none of the generated secret values appears
   done
 }
 
+# Fails at once, stopping nothing, when something already listens on the hub port (for
+# example a dev stack left running); otherwise that stack would answer our probes.
+require_port_free() {
+  if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+    echo "FAIL - 127.0.0.1:${port} is already in use (another stack running?). Stop it or set SAKURAOPS_DEV_HUB_PORT to a free port; nothing was changed." >&2
+    exit 1
+  fi
+}
+require_port_free
+
 SAKURAOPS_DEV_SECRETS_DIR="${good}" "${root}/scripts/dev-secrets.sh" >/dev/null
 export SAKURAOPS_DEV_SECRETS_DIR="${good}"
 
 dc build >/dev/null 2>&1 || { echo "FAIL - image build failed" >&2; exit 1; }
 echo "== scenario 1: fresh start (empty volume)"
+require_port_free
 dc up -d --build --wait --wait-timeout 300 >/dev/null 2>&1 || bad "fresh: dev stack did not become healthy"
 check "fresh: db-bootstrap and migrate exited 0" bash -c '[[ "$1" == "exited 0" && "$2" == "exited 0" ]]' _ "$(exit_state db-bootstrap)" "$(exit_state migrate)"
 check "fresh: migrate applied the baseline" bash -c 'grep -q "applied 00001" <<<"$1"' _ "$(logs_of migrate)"
@@ -71,6 +82,7 @@ admin_sql "UPDATE sakuraops.instance_settings SET instance_name = 'scenario-mark
 
 echo "== scenario 2: restart with the existing volume"
 dc down --remove-orphans >/dev/null 2>&1
+require_port_free
 dc up -d --wait --wait-timeout 300 >/dev/null 2>&1 || bad "restart: dev stack did not become healthy"
 check "restart: migrate is a no-op" bash -c 'grep -q "no migrations to apply" <<<"$1"' _ "$(logs_of migrate)"
 check "restart: bootstrap and migrate exited 0" bash -c '[[ "$1" == "exited 0" && "$2" == "exited 0" ]]' _ "$(exit_state db-bootstrap)" "$(exit_state migrate)"
@@ -89,6 +101,7 @@ echo "== scenario 4: schema behind the binary"
 dc down --volumes --remove-orphans >/dev/null 2>&1
 dc up -d --wait --wait-timeout 300 postgres >/dev/null 2>&1 || bad "behind: postgres did not become healthy"
 dc run --rm --no-deps db-bootstrap >/dev/null 2>&1 || bad "behind: bootstrap failed"
+require_port_free
 dc up -d --no-deps --wait --wait-timeout 120 hub >/dev/null 2>&1 || bad "behind: hub did not start"
 wait_code /readyz 503 30 && body_has '"schema_outdated"' && ok "behind: /readyz is 503 schema_outdated" || bad "behind: expected 503 schema_outdated"
 dc run --rm --no-deps migrate >/dev/null 2>&1 || bad "behind: migrate failed"
@@ -101,6 +114,7 @@ cp -p "${good}"/* "${bad}/"
 sed -i 's#:[0-9a-f]\{64\}@#:wrong-credential@#' "${bad}/migrator_database_url"
 proj="${base}-bad"
 export SAKURAOPS_DEV_SECRETS_DIR="${bad}"
+require_port_free
 if dc up -d --wait --wait-timeout 300 >/dev/null 2>&1; then bad "failure: up succeeded with a bad migrator credential"; else ok "failure: dev stack up fails"; fi
 check "failure: migrate exited non-zero" bash -c '[[ "$1" =~ ^exited\ [1-9] ]]' _ "$(exit_state migrate)"
 check "failure: hub never started" bash -c '[[ "$1" == "created" ]]' _ "$(docker inspect --format '{{.State.Status}}' "$(cid hub)")"
