@@ -84,7 +84,7 @@ func TestSummaryShowsCounts(t *testing.T) {
 
 func TestPlanMode(t *testing.T) {
 	dir := t.TempDir()
-	c := write(t, dir, "c.yaml", "services:\n  a:\n    image: postgres@"+dg+"\n  b:\n    image: postgres@"+dg+"\n  hub:\n    build:\n      target: hub\n")
+	c := write(t, dir, "c.yaml", "services:\n  a:\n    image: postgres@"+dg+"\n  b:\n    image: postgres@"+dg+"\n  hub:\n    build:\n      context: ../..\n      dockerfile: deployment/docker/hub.Dockerfile\n      target: hub\n")
 	var o, e bytes.Buffer
 	if got := run([]string{"plan", "-compose", c}, &o, &e, time.Now()); got != 0 {
 		t.Fatalf("exit %d %s", got, e.String())

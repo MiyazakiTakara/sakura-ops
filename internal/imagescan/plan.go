@@ -3,11 +3,19 @@ package imagescan
 import (
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 
 	"go.yaml.in/yaml/v4"
+)
+
+// The only build the scan reproduces (scripts/image-scan.sh). Any other build
+// section is rejected rather than silently scanning a different image.
+const (
+	buildContext    = "../.."
+	buildDockerfile = "deployment/docker/hub.Dockerfile"
 )
 
 var pinnedRef = regexp.MustCompile(`^([a-z0-9][a-z0-9._/-]*)@(sha256:[0-9a-f]{64})$`)
@@ -65,19 +73,24 @@ func ParsePlan(b []byte) (*Plan, error) {
 		s := c.Services[n]
 		if s.Build.Kind != 0 {
 			target := ""
-			switch s.Build.Kind {
-			case yaml.MappingNode:
-				var bs struct {
-					Target string `yaml:"target"`
-				}
-				if err := s.Build.Decode(&bs); err != nil {
-					return nil, fmt.Errorf("service %s: build: %w", n, err)
-				}
-				target = strings.TrimSpace(bs.Target)
-			case yaml.ScalarNode: // short form: build context only
-			default:
-				return nil, fmt.Errorf("service %s: unsupported build section", n)
+			if s.Build.Kind != yaml.MappingNode {
+				return nil, fmt.Errorf("service %s: build must be a mapping with context %s and dockerfile %s (the scan builds only that)", n, buildContext, buildDockerfile)
 			}
+			var bs struct {
+				Context    string `yaml:"context"`
+				Dockerfile string `yaml:"dockerfile"`
+				Target     string `yaml:"target"`
+			}
+			if err := s.Build.Decode(&bs); err != nil {
+				return nil, fmt.Errorf("service %s: build: %w", n, err)
+			}
+			if bs.Context == "" || path.Clean(bs.Context) != buildContext {
+				return nil, fmt.Errorf("service %s: build context %q is not %s (repository root relative to the compose file); the scan would not build what Compose builds", n, bs.Context, buildContext)
+			}
+			if bs.Dockerfile == "" || path.Clean(bs.Dockerfile) != buildDockerfile {
+				return nil, fmt.Errorf("service %s: build dockerfile %q is not %s; the scan would not build what Compose builds", n, bs.Dockerfile, buildDockerfile)
+			}
+			target = strings.TrimSpace(bs.Target)
 			label := target
 			if label == "" {
 				label = n

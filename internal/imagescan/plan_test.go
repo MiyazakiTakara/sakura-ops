@@ -21,11 +21,13 @@ services:
   migrate:
     build:
       context: ../..
+      dockerfile: deployment/docker/hub.Dockerfile
       target: migrator
     image: local-migrate:local
   hub:
     build:
       context: ../..
+      dockerfile: deployment/docker/hub.Dockerfile
       target: hub
     image: local-hub:local
 `
@@ -47,7 +49,7 @@ services:
 	}
 
 	// Base tree shape: only hub, no build target (default/last stage).
-	p, err = ParsePlan([]byte("services:\n  postgres:\n    image: postgres@" + d1 + "\n  hub:\n    build:\n      context: ../..\n      dockerfile: x\n"))
+	p, err = ParsePlan([]byte("services:\n  postgres:\n    image: postgres@" + d1 + "\n  hub:\n    build:\n      context: ../../\n      dockerfile: ./deployment/docker/hub.Dockerfile\n"))
 	if err != nil || len(p.Builds) != 1 || p.Builds[0].Target != "" || p.Builds[0].Label != "hub" {
 		t.Fatalf("%v %+v", err, p)
 	}
@@ -55,10 +57,6 @@ services:
 	p.Write(&o2)
 	if !strings.Contains(o2.String(), "build\thub\t-\thub\n") {
 		t.Errorf("empty target must print as '-': %q", o2.String())
-	}
-	// Short build form.
-	if p, err = ParsePlan([]byte("services:\n  hub:\n    build: .\n")); err != nil || len(p.Builds) != 1 {
-		t.Errorf("short build form: %v %+v", err, p)
 	}
 }
 
@@ -76,8 +74,14 @@ func TestParsePlanRejects(t *testing.T) {
 		"null services":           "services:\n",
 		"not yaml":                "services: [\n",
 		"empty file":              "",
+		"short build form":        "services:\n  hub:\n    build: ../..\n",
+		"wrong dockerfile":        "services:\n  hub:\n    build:\n      context: ../..\n      dockerfile: other.Dockerfile\n",
+		"missing dockerfile":      "services:\n  hub:\n    build:\n      context: ../..\n",
+		"wrong context":           "services:\n  hub:\n    build:\n      context: .\n      dockerfile: deployment/docker/hub.Dockerfile\n",
+		"missing context":         "services:\n  hub:\n    build:\n      dockerfile: deployment/docker/hub.Dockerfile\n",
+		"escaping dockerfile":     "services:\n  hub:\n    build:\n      context: ../..\n      dockerfile: ../x/../deployment/docker/hub.Dockerfile\n",
 		"label collision":         "services:\n  a:\n    image: x/postgres@" + d1 + "\n  b:\n    image: y/postgres@" + d2 + "\n",
-		"duplicate target":        "services:\n  a:\n    build:\n      target: t\n  b:\n    build:\n      target: t\n",
+		"duplicate target":        "services:\n  a:\n    build:\n      context: ../..\n      dockerfile: deployment/docker/hub.Dockerfile\n      target: t\n  b:\n    build:\n      context: ../..\n      dockerfile: deployment/docker/hub.Dockerfile\n      target: t\n",
 		"unpinned next to pinned": "services:\n  a:\n    image: postgres@" + d1 + "\n  b:\n    image: redis:7\n",
 	}
 	for name, in := range cases {

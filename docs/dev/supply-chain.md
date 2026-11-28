@@ -152,8 +152,11 @@ YAML parsing in Go (`imagescan plan -compose <file>`, tab-separated output), nev
   `docker build --target <target>` from `deployment/docker/hub.Dockerfile` (no target means the last
   stage) and scanned. The label is the build target, or the service name when there is none
   (`hub`, and `migrator` once the Compose file has the migrate service). Built images are tagged
-  `sakuraops-image-scan-<label>:local`. The script uses the fixed Dockerfile path above; a build
-  section naming another Dockerfile is not followed.
+  `sakuraops-image-scan-<label>:local`. The plan fails closed on build sections: `build` must be a
+  mapping whose `context` resolves to the repository root (`../..` relative to the compose file) and
+  whose `dockerfile` is `deployment/docker/hub.Dockerfile`. Any other context or Dockerfile, a missing
+  one, or the short `build: <path>` form is an error, so the scan can never build a different image
+  than the one the script builds.
 
 Needs docker and network. Without docker only `imagescan plan`, the checker and the unit tests can
 be run (see Local run).
@@ -213,6 +216,19 @@ Compose file; the final image
 has no package manager database for the Go binary beyond embedded module info; grype matches
 against advisory data and can produce false positives or miss unpublished issues; vulnerabilities
 without distro fix data show as unfixed and only warn; the build-stage images are not scanned.
+
+## Known limitations
+
+- **Go standard library of `gosu` is not evaluated by the current scan.** An independent variant
+  analysis (2026-11-28, grype 0.122.1, DB built 2026-11-28) found that direct image scans
+  (`registry:`, and very likely `docker:`; CI reported the same 111 HIGH/CRITICAL matches as the
+  registry scan) report zero Go stdlib matches for `/usr/local/bin/gosu` (gosu v1.20.0, built with
+  go1.24.6). Running grype on a syft SBOM of the same image reports 61 distinct Go stdlib advisories
+  (3 Critical, 32 High), fixed upstream only in newer Go releases. The cause of the difference is
+  not verified. Closing the gap (for example scanning from SBOMs) would make the pinned postgres
+  image fail the unchanged policy, because those findings have a Go fix but nothing a SakuraOps
+  change can apply without a rebuilt upstream image. The gate and policy are deliberately unchanged;
+  the decision is pending with the owner. Details and options: [postgres-image-assessment.md](postgres-image-assessment.md).
 
 ## Coverage and limitations
 
