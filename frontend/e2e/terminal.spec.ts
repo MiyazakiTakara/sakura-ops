@@ -97,7 +97,7 @@ test('a line longer than the terminal width redraws without leftovers', async ({
 test('terminal makes no network requests besides same-origin static assets', async ({ page }) => {
 	const urls: string[] = [];
 	page.on('request', (r) => urls.push(r.url()));
-	const origin = 'http://127.0.0.1:18181';
+	const origin = new URL(test.info().project.use.baseURL ?? '').origin;
 	await openSpike(page);
 	await run(page, 'help');
 	await run(page, 'show version');

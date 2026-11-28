@@ -8,6 +8,12 @@
 	import { INITIAL_REDRAW, redrawSequence, toLineEnd, type RedrawState } from './redraw';
 
 	let host: HTMLDivElement;
+	let instance: Terminal | undefined;
+
+	/** Moves keyboard focus into the terminal input. */
+	export function focus(): void {
+		instance?.focus();
+	}
 
 	// Prompt colour is the DESIGN.md "success" token (#98CFA8).
 	const PROMPT_ANSI = `\x1b[38;2;152;207;168m${PROMPT}\x1b[0m`;
@@ -22,6 +28,7 @@
 			scrollback: 500,
 			theme: { background: '#101820', foreground: '#f0f2f5', cursor: '#d9a0b7' }
 		});
+		instance = term;
 		const fit = new FitAddon();
 		term.loadAddon(fit);
 		term.open(host);
@@ -104,6 +111,7 @@
 		return () => {
 			ro.disconnect();
 			sub.dispose();
+			instance = undefined;
 			term.dispose();
 		};
 	});
@@ -113,7 +121,7 @@
 	class="term"
 	bind:this={host}
 	role="group"
-	aria-label="skr terminal (local spike). Press Escape to leave the terminal."
+	aria-label="skr terminal (local spike). Press Escape or Control+] to leave the terminal."
 ></div>
 
 <style>

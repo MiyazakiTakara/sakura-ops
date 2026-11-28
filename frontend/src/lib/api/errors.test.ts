@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isApiError, isHealth, parseApiError, readApiError } from './errors';
+import { isApiError, isHealth, isReadiness, parseApiError, readApiError } from './errors';
 
 // Shared with the Go tests (internal/api/contract_test.go): same files, same expectations.
 const raw = import.meta.glob<string>('../../../../api/fixtures/*.json', {
@@ -61,5 +61,18 @@ describe('readApiError', () => {
 
 	it('returns null for JSON that does not match the contract', async () => {
 		expect(await readApiError(new Response('{"error":"x"}', { status: 500 }))).toBeNull();
+	});
+});
+
+describe('isReadiness', () => {
+	it('accepts the contract shape', () => {
+		expect(isReadiness({ status: 'ready', schema_version: 3 })).toBe(true);
+	});
+	it('rejects other shapes', () => {
+		expect(isReadiness({ status: 'ready' })).toBe(false);
+		expect(isReadiness({ status: 'ok', schema_version: 3 })).toBe(false);
+		expect(isReadiness({ status: 'ready', schema_version: 1.5 })).toBe(false);
+		expect(isReadiness({ status: 'ready', schema_version: 1, extra: 1 })).toBe(false);
+		expect(isReadiness(null)).toBe(false);
 	});
 });
