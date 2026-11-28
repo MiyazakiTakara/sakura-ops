@@ -21,11 +21,19 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY db/ ./db/
 COPY --from=web /src/frontend/build/ ./internal/webui/dist/
-RUN go build -trimpath -ldflags='-s -w' -o /out/sakuraops-server ./cmd/sakuraops-server
+RUN go build -trimpath -ldflags='-s -w' -o /out/sakuraops-server ./cmd/sakuraops-server \
+ && go build -trimpath -ldflags='-s -w' -o /out/sakuraops-migrate ./cmd/sakuraops-migrate
 
-# --- Stage 3: minimal non-root runtime, no shell ---
+# --- Stage 3a: one-shot migrator (target "migrator"): only sakuraops-migrate, no hub, no UI ---
 # gcr.io/distroless/static-debian13:nonroot
-FROM gcr.io/distroless/static-debian13@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
+FROM gcr.io/distroless/static-debian13@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5 AS migrator
+COPY --from=build /out/sakuraops-migrate /sakuraops-migrate
+USER 65532:65532
+ENTRYPOINT ["/sakuraops-migrate"]
+CMD ["up"]
+
+# --- Stage 3b: minimal non-root hub runtime, no shell (last stage = default target) ---
+FROM gcr.io/distroless/static-debian13@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5 AS hub
 COPY --from=build /out/sakuraops-server /sakuraops-server
 USER 65532:65532
 EXPOSE 8080

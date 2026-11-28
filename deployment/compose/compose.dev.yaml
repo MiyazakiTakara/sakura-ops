@@ -1,5 +1,8 @@
 # SakuraOps development stack: PostgreSQL + hub. Lab and developer machines only.
-# No TLS, no migrations (hub does not use the database yet), not a production profile.
+# No TLS (sslmode=disable on the internal network), not a production profile.
+# Containers run as the invoking host user (never 0), see the secrets note at the end.
+# Flow: postgres -> db-bootstrap (roles.sql, admin credential) -> migrate (migrator DSN
+# only) -> hub (app DSN only). Each container mounts only its own secrets.
 # Usage: make dev-secrets dev-up (see docs/dev/compose.md).
 name: sakuraops-dev
 
@@ -34,18 +37,34 @@ services:
       test: ["CMD-SHELL", "pg_isready -U sakuraops_admin -d sakuraops -h 127.0.0.1"]
       interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 24
       start_period: 10s
 
-  hub:
-    build:
-      context: ../..
-      dockerfile: deployment/docker/hub.Dockerfile
-    image: sakuraops-dev-hub:local
-    restart: unless-stopped
-    command: ["-listen", "0.0.0.0:8080"]
-    user: "65532:65532"
+  # One-shot: creates the two login roles and the schema with the admin credential.
+  # Same pinned image as postgres (it ships psql). Idempotent; resets role passwords.
+  db-bootstrap:
+    image: postgres@sha256:64c8b0d31e4ab6ea665e8426ea406a94bf52de3c05b3a4a8bf713704eefa9328
+    restart: "no"
+    user: "${SAKURAOPS_DEV_UID:?set by make dev-up}:${SAKURAOPS_DEV_GID:?set by make dev-up}"
     read_only: true
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        PGPASSWORD="$$(cat /run/secrets/postgres_password)"
+        export PGPASSWORD
+        exec psql -v ON_ERROR_STOP=1 -h postgres -U sakuraops_admin -d sakuraops -f /bootstrap/roles.sql
+    environment:
+      SAKURAOPS_MIGRATOR_PASSWORD_FILE: /run/secrets/migrator_password
+      SAKURAOPS_APP_PASSWORD_FILE: /run/secrets/app_password
+    volumes:
+      - ../../db/bootstrap/roles.sql:/bootstrap/roles.sql:ro
+    secrets:
+      - postgres_password
+      - migrator_password
+      - app_password
+    networks:
+      - backend
     cap_drop:
       - ALL
     security_opt:
@@ -53,6 +72,49 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # One-shot: applies the embedded migrations as sakuraops_migrator, then exits.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/hub.Dockerfile
+      target: migrator
+    image: sakuraops-dev-migrate:local
+    restart: "no"
+    command: ["-database-url-file", "/run/secrets/migrator_database_url", "up"]
+    user: "${SAKURAOPS_DEV_UID:?set by make dev-up}:${SAKURAOPS_DEV_GID:?set by make dev-up}"
+    read_only: true
+    secrets:
+      - migrator_database_url
+    networks:
+      - backend
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+
+  hub:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/hub.Dockerfile
+      target: hub
+    image: sakuraops-dev-hub:local
+    restart: unless-stopped
+    command: ["-listen", "0.0.0.0:8080", "-database-url-file", "/run/secrets/app_database_url"]
+    user: "${SAKURAOPS_DEV_UID:?set by make dev-up}:${SAKURAOPS_DEV_GID:?set by make dev-up}"
+    read_only: true
+    secrets:
+      - app_database_url
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     networks:
       - backend
       - edge
@@ -76,6 +138,19 @@ networks:
 volumes:
   pgdata: {}
 
+# Files live in .dev-secrets/ (make dev-secrets, 0600, owned by the developer). Outside
+# Swarm, Compose bind-mounts them read-only with the host owner and mode and ignores any
+# uid/gid/mode, so the non-root containers (hub, migrate, db-bootstrap) run as the
+# developer's own uid:gid (SAKURAOPS_DEV_UID/GID, set by make) and can read exactly the
+# files they list. No container lists a secret it does not need.
 secrets:
-  postgres_password:
-    file: ../../.dev-secrets/postgres_password
+  postgres_password: # admin (superuser): postgres and db-bootstrap only
+    file: ${SAKURAOPS_DEV_SECRETS_DIR:-../../.dev-secrets}/postgres_password
+  migrator_password: # plain password, db-bootstrap only
+    file: ${SAKURAOPS_DEV_SECRETS_DIR:-../../.dev-secrets}/migrator_password
+  app_password: # plain password, db-bootstrap only
+    file: ${SAKURAOPS_DEV_SECRETS_DIR:-../../.dev-secrets}/app_password
+  migrator_database_url: # migrate only
+    file: ${SAKURAOPS_DEV_SECRETS_DIR:-../../.dev-secrets}/migrator_database_url
+  app_database_url: # hub only
+    file: ${SAKURAOPS_DEV_SECRETS_DIR:-../../.dev-secrets}/app_database_url
